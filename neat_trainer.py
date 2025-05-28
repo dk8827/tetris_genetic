@@ -23,6 +23,7 @@ class NeatTrainer:
         self.current_generation = 0
         self.best_genome_overall = None
         self.highest_fitness_overall = -float('inf')
+        self.max_score_training_overall_actual = 0 # Tracks the max score seen in the entire training session
         
         self.pygame_surface_train = None
         self.nn_visualizer_train = None
@@ -38,7 +39,7 @@ class NeatTrainer:
              pygame.display.set_caption(f"NEAT Tetris - Training Gen: {self.current_generation}")
 
 
-        AIGameController.reset_global_max_score() # Reset for this generation's max score display
+        AIGameController.reset_max_score_current_generation() # Reset for this generation's max score display
 
         for genome_id_tuple, genome in genomes:
             # The genome_id from NEAT can be a tuple if parallel, or just an int.
@@ -65,7 +66,8 @@ class NeatTrainer:
 
             game_sim = AIGameController(current_surface_for_game, net, config, 
                                         draw_game=draw_while_training, 
-                                        ai_stats_info=ai_stats_info)
+                                        ai_stats_info=ai_stats_info,
+                                        max_score_training_overall=self.max_score_training_overall_actual)
             
             genome.fitness = game_sim.run_for_evaluation(
                 nn_visualizer=self.nn_visualizer_train if draw_while_training else None,
@@ -73,6 +75,10 @@ class NeatTrainer:
                 best_genome_for_viz=self.best_genome_overall if draw_while_training else None, 
                 neat_config_for_viz=self.neat_config if draw_while_training else None
             )
+
+            # Update the overall max score for the entire training session
+            if game_sim.score > self.max_score_training_overall_actual:
+                self.max_score_training_overall_actual = game_sim.score
 
             if genome.fitness is not None and genome.fitness > self.highest_fitness_overall:
                 self.highest_fitness_overall = genome.fitness
@@ -90,7 +96,8 @@ class NeatTrainer:
         self.current_generation = 0 # Reset for a new training run
         self.best_genome_overall = None
         self.highest_fitness_overall = -float('inf')
-        AIGameController.reset_global_max_score()
+        self.max_score_training_overall_actual = 0 # Reset for new training session
+        AIGameController.reset_max_score_current_generation() # Reset gen max at start of full training
 
 
         winner_genome = self.population.run(

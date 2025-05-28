@@ -76,43 +76,59 @@ class Renderer:
                                       shape_draw_sy + i * preview_block_size,
                                       preview_block_size, preview_block_size), 0)
 
-    def draw_game_info(self, score, high_score, level=None, ai_stats=None):
+    def draw_game_info(self, score, current_gen_max_score, training_overall_max_score, level=None, ai_stats=None):
         self.surface.fill(COLOR_BLACK) # Clear screen
 
         # Score
         score_label = FONT_MAP['comicsans_30'].render(f'Score: {score}', 1, COLOR_WHITE)
         sx_info_right = TOP_LEFT_X + PLAY_WIDTH + 30
         sy_info_start_right = TOP_LEFT_Y + PLAY_HEIGHT / 2 + 50 # Below next shape
-        self.surface.blit(score_label, (sx_info_right, sy_info_start_right + 150))
+        # Reposition Score to be on the left side for consistency
+        info_x_base = TOP_LEFT_X - 250 # Base X for info on the left (adjust as needed)
+        if info_x_base < 10: info_x_base = 10 # Ensure it's not off-screen
 
-        # High Score / Max Score
-        max_score_text = 'Max Score' if ai_stats else 'High Score'
-        max_score_label = FONT_MAP['comicsans_30'].render(f'{max_score_text}: {high_score}', 1, COLOR_WHITE)
-        max_score_x = TOP_LEFT_X - max_score_label.get_width() - 30
-        max_score_y = TOP_LEFT_Y + PLAY_HEIGHT / 2 - 100 # Adjusted position
-        self.surface.blit(max_score_label, (max_score_x, max_score_y))
+        current_y_offset = TOP_LEFT_Y + 20
 
-        # Additional Info (Level for human, AI stats for AI)
-        text_start_y = max_score_y + max_score_label.get_height() + 10
-        if ai_stats: # (generation, population_size, genome_id)
+        self.surface.blit(score_label, (info_x_base, current_y_offset))
+        current_y_offset += score_label.get_height() + 10
+
+        if ai_stats: # Training mode or AI with stats
+            gen_max_label = FONT_MAP['comicsans_20'].render(f'Max Score (Gen): {current_gen_max_score}', 1, COLOR_WHITE)
+            overall_max_label = FONT_MAP['comicsans_20'].render(f'Max Score (Train): {training_overall_max_score}', 1, COLOR_WHITE)
+            
+            self.surface.blit(gen_max_label, (info_x_base, current_y_offset))
+            current_y_offset += gen_max_label.get_height() + 5
+            self.surface.blit(overall_max_label, (info_x_base, current_y_offset))
+            current_y_offset += overall_max_label.get_height() + 20 # More space before AI stats
+
             gen_label = FONT_MAP['comicsans_20'].render(f"Gen: {ai_stats['gen']}", 1, COLOR_WHITE)
             pop_label = FONT_MAP['comicsans_20'].render(f"Pop: {ai_stats['pop_size']}", 1, COLOR_WHITE)
             genome_label = FONT_MAP['comicsans_20'].render(f"Genome: {ai_stats['genome_id']}", 1, COLOR_WHITE)
-            self.surface.blit(gen_label, (max_score_x, text_start_y))
-            text_start_y += gen_label.get_height() + 5
-            self.surface.blit(pop_label, (max_score_x, text_start_y))
-            text_start_y += pop_label.get_height() + 5
-            self.surface.blit(genome_label, (max_score_x, text_start_y))
-        elif level is not None:
-            mode_label = FONT_MAP['comicsans_20'].render("Mode: Human Player", 1, COLOR_WHITE)
-            level_label = FONT_MAP['comicsans_20'].render(f"Level: {level}", 1, COLOR_WHITE)
-            self.surface.blit(mode_label, (max_score_x, text_start_y))
-            text_start_y += mode_label.get_height() + 5
-            self.surface.blit(level_label, (max_score_x, text_start_y))
-        else: # E.g. AI playing back, no training stats
-            mode_label = FONT_MAP['comicsans_20'].render("Mode: AI Player", 1, COLOR_WHITE)
-            self.surface.blit(mode_label, (max_score_x, text_start_y))
+            self.surface.blit(gen_label, (info_x_base, current_y_offset))
+            current_y_offset += gen_label.get_height() + 5
+            self.surface.blit(pop_label, (info_x_base, current_y_offset))
+            current_y_offset += pop_label.get_height() + 5
+            self.surface.blit(genome_label, (info_x_base, current_y_offset))
 
+        elif level is not None: # Human player
+            mode_label = FONT_MAP['comicsans_20'].render("Mode: Human Player", 1, COLOR_WHITE)
+            highscore_label = FONT_MAP['comicsans_20'].render(f'High Score: {current_gen_max_score}', 1, COLOR_WHITE) # Use current_gen_max_score as it's the session high score for human
+            level_label = FONT_MAP['comicsans_20'].render(f"Level: {level}", 1, COLOR_WHITE)
+            
+            self.surface.blit(mode_label, (info_x_base, current_y_offset))
+            current_y_offset += mode_label.get_height() + 5
+            self.surface.blit(highscore_label, (info_x_base, current_y_offset))
+            current_y_offset += highscore_label.get_height() + 5
+            self.surface.blit(level_label, (info_x_base, current_y_offset))
+        
+        else: # AI playing back (no training stats, no human level)
+            # For AI Playback, current_gen_max_score and training_overall_max_score are the same (the global max for that playback)
+            mode_label = FONT_MAP['comicsans_20'].render("Mode: AI Player", 1, COLOR_WHITE)
+            max_score_playback_label = FONT_MAP['comicsans_20'].render(f'Max Score: {training_overall_max_score}', 1, COLOR_WHITE)
+
+            self.surface.blit(mode_label, (info_x_base, current_y_offset))
+            current_y_offset += mode_label.get_height() + 5
+            self.surface.blit(max_score_playback_label, (info_x_base, current_y_offset))
 
     def draw_pause_message(self):
         pause_label = FONT_MAP['comicsans_60'].render("PAUSED", 1, COLOR_YELLOW)

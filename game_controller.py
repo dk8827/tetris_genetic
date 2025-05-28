@@ -148,7 +148,12 @@ class HumanGameController(BaseGameController):
 
     def render_game(self):
         visual_grid = self.board.create_visual_grid()
-        self.renderer.draw_game_info(self.score, self.max_score_so_far_session, level=self.level)
+        self.renderer.draw_game_info(
+            self.score, 
+            current_gen_max_score=self.max_score_so_far_session, 
+            training_overall_max_score=0, # Not applicable for human player, pass 0
+            level=self.level
+        )
         self.renderer.draw_play_area(visual_grid, self.current_piece if self.game_state != GameState.GAME_OVER else None)
         self.renderer.draw_next_shape(self.next_piece)
 
@@ -184,65 +189,72 @@ class HumanGameController(BaseGameController):
 
 
 class AIGameController(BaseGameController):
-    def __init__(self, surface, neat_network, neat_config, draw_game=True, ai_stats_info=None):
+    _max_score_current_generation = 0 # Tracks max score *within* the current generation being evaluated
+
+    @staticmethod
+    def reset_max_score_current_generation():
+        AIGameController._max_score_current_generation = 0
+    
+    @staticmethod
+    def get_max_score_current_generation():
+        return AIGameController._max_score_current_generation
+
+    def __init__(self, surface, neat_network, neat_config, draw_game=True, ai_stats_info=None, max_score_training_overall=0):
         super().__init__(surface)
         self.ai_player = AIPlayer(neat_network, neat_config)
         self.draw_game = draw_game
         self.genome_fitness = 0
         self.total_lines_cleared_genome = 0
         self.game_frames = 0
-        self.ai_stats_info = ai_stats_info # Dict: {'gen': G, 'pop_size': P, 'genome_id': ID} for display
-        self.max_score_so_far_training_session = 0 # Used if drawing during training
+        self.ai_stats_info = ai_stats_info 
+        # self.max_score_so_far_session will hold max for current gen, updated in _update_score_and_level
+        self.max_score_so_far_session = 0 
+        self.max_score_training_overall = max_score_training_overall # Max for entire training session, passed from NeatTrainer
 
-        # For AI playback, we might need a global max score reference if not training
-        global _GLOBAL_MAX_SCORE_TRACKER # Ugly, better to pass it in if needed for playback
-        if not self.ai_stats_info and '_GLOBAL_MAX_SCORE_TRACKER' not in globals():
-            _GLOBAL_MAX_SCORE_TRACKER = 0
-        
-        if not self.ai_stats_info: # If playing back (not training)
-            self.max_score_so_far_session = _GLOBAL_MAX_SCORE_TRACKER
-        else: # If training
-            # This might be better managed by NeatTrainer class
-            self.max_score_so_far_session = AIGameController.get_global_max_score()
+        global _GLOBAL_MAX_SCORE_TRACKER 
+        if not self.ai_stats_info: # Playback mode
+            if '_GLOBAL_MAX_SCORE_TRACKER' not in globals():
+                _GLOBAL_MAX_SCORE_TRACKER = 0
+            self.max_score_so_far_session = _GLOBAL_MAX_SCORE_TRACKER 
+            self.max_score_training_overall = _GLOBAL_MAX_SCORE_TRACKER 
+        else: # Training mode
+            # max_score_so_far_session will be updated based on _max_score_current_generation
+            # max_score_training_overall is passed in and used directly for display
+            pass
 
 
-    # Static variable to track max score across all AI genomes in a training session
-    # This is a bit of a workaround for the global MAX_SCORE_SO_FAR
-    _ai_training_session_max_score = 0
-
-    @staticmethod
-    def reset_global_max_score():
-        AIGameController._ai_training_session_max_score = 0
-    
-    @staticmethod
-    def get_global_max_score():
-        return AIGameController._ai_training_session_max_score
-
-    def _update_score_and_level(self, cleared_lines): # Level not used by AI, but score for display
+    def _update_score_and_level(self, cleared_lines):
         self.total_lines_cleared_genome += cleared_lines
         self.score += SCORE_MAP.get(cleared_lines, 0)
         
-        # Fitness calculation specific to AI training
-        self.genome_fitness += cleared_lines * 10 # Example: config.AI_FITNESS_LINE_CLEAR_BONUS
+        self.genome_fitness += cleared_lines * 10 
         if cleared_lines == 4:
-            self.genome_fitness += 5 # Example: config.AI_FITNESS_TETRIS_BONUS
+            self.genome_fitness += 5
 
-        if self.ai_stats_info: # If in training mode
-            if self.score > AIGameController._ai_training_session_max_score:
-                AIGameController._ai_training_session_max_score = self.score
-            self.max_score_so_far_session = AIGameController._ai_training_session_max_score
+        if self.ai_stats_info: # Training mode
+            if self.score > AIGameController._max_score_current_generation:
+                AIGameController._max_score_current_generation = self.score
+            self.max_score_so_far_session = AIGameController._max_score_current_generation
+            # self.max_score_training_overall is managed by NeatTrainer and passed to __init__
+            # It represents the overall max and is displayed directly.
         else: # Playback mode
             global _GLOBAL_MAX_SCORE_TRACKER
             if self.score > _GLOBAL_MAX_SCORE_TRACKER:
                 _GLOBAL_MAX_SCORE_TRACKER = self.score
             self.max_score_so_far_session = _GLOBAL_MAX_SCORE_TRACKER
+            self.max_score_training_overall = _GLOBAL_MAX_SCORE_TRACKER
 
 
     def render_game(self, nn_visualizer=None, genome_for_viz=None, neat_config_for_viz=None):
         if not self.draw_game: return
 
         visual_grid = self.board.create_visual_grid()
-        self.renderer.draw_game_info(self.score, self.max_score_so_far_session, ai_stats=self.ai_stats_info)
+        self.renderer.draw_game_info(
+            self.score, 
+            current_gen_max_score=self.max_score_so_far_session, 
+            training_overall_max_score=self.max_score_training_overall, 
+            ai_stats=self.ai_stats_info
+        )
         self.renderer.draw_play_area(visual_grid, self.current_piece if self.game_state != GameState.GAME_OVER else None)
         self.renderer.draw_next_shape(self.next_piece)
 
