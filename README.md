@@ -2,25 +2,20 @@
 
 ## Description
 
-This project implements a Tetris game where a NeuroEvolution of Augmenting Topologies (NEAT) algorithm learns to play. The AI is trained to make decisions based on features of the game state, such as aggregate height of blocks, number of cleared lines, holes, and board bumpiness. The project uses Pygame for visualization and interaction.
+This project implements a Tetris game where a NeuroEvolution of Augmenting Topologies (NEAT) algorithm learns to play. The AI is trained to make decisions based on features of the game state, such as the aggregate height of blocks, number of lines cleared by a move, holes in the board, and overall board bumpiness. The project uses Pygame for visualization and interaction, and features a modular codebase for improved organization and scalability.
 
 ## Features
 
 *   **NEAT Algorithm**: AI learns to play Tetris through evolutionary computation.
-*   **Pygame Interface**: Visual representation of the Tetris game, AI training process, and the neural network of the best performing genome.
+*   **Pygame Interface**: Visual representation of the Tetris game, AI training process (optional), and the neural network of the best performing genome during training.
+*   **Modular Design**: Code is organized into logical modules (e.g., `board.py`, `piece.py`, `game_controller.py`, `neat_trainer.py`, `ai_utils.py`).
 *   **Training Modes**:
     *   Train with real-time visualization of games.
-    *   Train without visualization for faster computation.
+    *   Train without visualization for significantly faster computation.
 *   **Play with Saved AI**: Load a previously trained and saved AI model (`best_tetris_ai.pkl`) to watch it play.
+*   **Human vs. AI**: Option for human players to play Tetris.
 *   **Customizable NEAT Configuration**: The `config-feedforward.txt` file allows tweaking of NEAT parameters.
-*   **Main Menu**: User-friendly menu to select actions (train, play).
-
-## File Structure
-
-*   `program.py`: The main Python script containing all the game logic, Pygame visualization, NEAT integration, and AI decision-making.
-*   `config-feedforward.txt`: Configuration file for the NEAT algorithm. It defines parameters for the neural network structure, mutation rates, speciation, etc.
-*   `best_tetris_ai.pkl`: This file is generated after training and stores the best-performing AI genome and its configuration. It's used by the "Play with Saved AI" feature.
-*   `README.md`: This file.
+*   **Main Menu**: User-friendly menu to select actions (train AI, play as AI, play as human).
 
 ## Setup and Installation
 
@@ -28,7 +23,7 @@ This project implements a Tetris game where a NeuroEvolution of Augmenting Topol
 2.  **Clone the Repository (if applicable)**:
     ```bash
     git clone <repository-url>
-    cd neat-tetris-ai 
+    cd <repository-directory>
     ```
 3.  **Create a Virtual Environment (Recommended)**:
     ```bash
@@ -36,47 +31,63 @@ This project implements a Tetris game where a NeuroEvolution of Augmenting Topol
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
 4.  **Install Dependencies**:
-    The primary dependencies are `pygame` and `neat-python`.
+    Install the required packages using the `requirements.txt` file:
     ```bash
-    pip install pygame neat-python
+    pip install -r requirements.txt
     ```
+    This will install `pygame` and `neat-python`, among any other necessary dependencies.
 
 ## How to Run
 
-Execute the main program script from your terminal:
+Execute the main script from your terminal in the project's root directory:
 
 ```bash
-python program.py
+python main.py
 ```
 
 This will open a main menu with the following options:
 
-*   **Train AI (with Visualization)**: Starts the NEAT training process and shows the games being played by each genome in the population. The neural network of the current best genome is also displayed.
-*   **Train AI (No Visualization - Faster)**: Starts the NEAT training process without rendering the game. This significantly speeds up training. Progress is printed to the console.
-*   **Play with Saved AI**: If a `best_tetris_ai.pkl` file exists (from a previous training session), this option loads the AI and lets you watch it play.
+*   **Train AI (with Visualization)**: Starts NEAT training with game rendering. Displays the best genome's neural network.
+*   **Train AI (No Visualization - Faster)**: Starts NEAT training without game rendering for faster processing. Progress is shown in the console.
+*   **Play with Saved AI**: Loads `best_tetris_ai.pkl` (if it exists) and lets you watch the AI play.
+*   **Play Tetris (Human Controlled)**: Start a game of Tetris that you control.
 
-After training (either mode), if a new best AI is found, it will be saved to `best_tetris_ai.pkl`, and the program will automatically proceed to let you watch this newly trained AI play.
+After training, the best AI model is saved to `best_tetris_ai.pkl`. If training was initiated from the menu, the program may offer to play with this newly trained AI.
 
 ## NEAT Configuration
 
-The file `config-feedforward.txt` contains all the parameters for the NEAT algorithm. You can modify this file to experiment with different settings:
+The `config-feedforward.txt` file defines parameters for the NEAT algorithm:
 
-*   `pop_size`: Number of genomes in each generation.
-*   `num_inputs`: Number of input features to the neural network (currently 4: aggregate height, lines cleared, holes, bumpiness).
-*   `num_outputs`: Number of output values from the neural network (currently 1: a score for the desirability of a move).
-*   Mutation rates, activation functions, connection probabilities, and speciation thresholds.
+*   `pop_size`: Number of genomes per generation.
+*   `fitness_threshold`: Target fitness score to stop evolution.
+*   Input nodes (`num_inputs`): The network uses 4 inputs:
+    1.  Aggregate height of all columns.
+    2.  Number of lines cleared by the current move.
+    3.  Number of holes in the board.
+    4.  Board "bumpiness" (sum of height differences between adjacent columns).
+*   Output nodes (`num_outputs`): The network has 1 output, representing the desirability of a potential move.
+*   Other parameters include mutation rates, activation functions, speciation, etc.
 
-Refer to the [NEAT-Python documentation](https://neat-python.readthedocs.io/en/latest/config_file.html) for a detailed explanation of all configuration options.
+Refer to the [NEAT-Python documentation](https://neat-python.readthedocs.io/en/latest/config_file.html) for details on all options.
 
 ## Controls
 
-*   **During AI Training Visualization / AI Playback**:
-    *   `Q`: Quit the current game/visualization and exit the program.
-*   **Main Menu**:
-    *   Click on buttons to select options.
-    *   `Q`: Quit the program.
+### Human Gameplay:
+*   **Left/Right Arrow Keys**: Move piece horizontally.
+*   **Down Arrow Key**: Soft drop piece.
+*   **Up Arrow Key**: Hard drop piece.
+*   **Space Bar**: Rotate piece.
+*   **P**: Pause / Unpause game.
+*   **Q**: Quit the current game (returns to menu or exits).
+
+### AI Playback / Training with Visualization:
+*   **Q**: Quit the visualization/playback.
+
+### Main Menu:
+*   **Mouse Click**: Select menu options.
+*   **Q**: Quit the application.
 
 ## Notes
 
-*   The AI evaluates potential moves by simulating the placement of the current piece in all possible rotations and horizontal positions. For each simulated placement, it calculates features of the resulting board state and feeds them into its neural network. The move corresponding to the highest output from the network is chosen.
-*   Fitness for each genome is primarily based on the number of lines cleared, with additional small rewards for survival and penalties for game overs or undesirable board states (e.g., high stacks). 
+*   The AI evaluates moves by simulating piece placements in all valid positions and rotations. For each, it calculates board metrics, feeds them to its neural network, and chooses the move with the highest score.
+*   Fitness in NEAT is primarily based on lines cleared, with considerations for game duration or score. 
