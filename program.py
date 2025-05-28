@@ -601,10 +601,14 @@ def draw_neural_network(surface, genome, config, x_start, y_start, width, height
 
 
 
-def eval_genomes(genomes, config):
+def eval_genomes(genomes, config, draw_while_training=True):
     global MAX_SCORE_SO_FAR, GENERATION_COUNT, BEST_GENOME_EVER_FOR_VIZ, HIGHEST_FITNESS_EVER_FOR_VIZ
     GENERATION_COUNT += 1
-    win = pygame.display.set_mode((S_WIDTH, S_HEIGHT)) # Initialize once per generation if needed
+    win = None # Initialize win to None
+    if draw_while_training:
+        win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
+        pygame.display.set_caption(f"NEAT Tetris - Gen: {GENERATION_COUNT}")
+
 
     for genome_id, genome in genomes:
         net = neat.nn.FeedForwardNetwork.create(genome, config)
@@ -812,35 +816,32 @@ def eval_genomes(genomes, config):
 
 
             # --- Drawing ---
-            # Only draw if you want to watch it train (slows down significantly)
-            # For faster training, comment out drawing or draw only for best genome.
-            # if GENERATION_COUNT % 5 == 0 and genome_id == genomes[0][0]: # Draw first genome every 5 gens
-            if True: # Draw all
+            if draw_while_training:
+                # Only draw if you want to watch it train (slows down significantly)
+                # For faster training, comment out drawing or draw only for best genome.
+                # if GENERATION_COUNT % 5 == 0 and genome_id == genomes[0][0]: # Draw first genome every 5 gens
+                # if True: # Draw all # This line would be controlled by draw_while_training
                 draw_window(win, grid, score, MAX_SCORE_SO_FAR, GENERATION_COUNT, len(genomes), genome_id)
                 draw_next_shape(next_piece, win)
 
                 # Draw the best neural network found so far
-                # Calculate position for NN visualization area to the right of Next Shape
-                # TOP_LEFT_X, PLAY_WIDTH, S_WIDTH, BLOCK_SIZE, TOP_LEFT_Y, PLAY_HEIGHT are global/derived
-                next_shape_display_sx = TOP_LEFT_X + PLAY_WIDTH + 30 
+                next_shape_display_sx = TOP_LEFT_X + PLAY_WIDTH + 30
                 next_shape_display_width = 5 * BLOCK_SIZE
                 padding_after_next_shape = 20
                 padding_right_edge = 20
 
                 nn_area_x = next_shape_display_sx + next_shape_display_width + padding_after_next_shape
-                nn_area_y = TOP_LEFT_Y + 50 # Y position (can be adjusted if needed)
+                nn_area_y = TOP_LEFT_Y + 50
                 nn_area_width = S_WIDTH - nn_area_x - padding_right_edge
-                nn_area_height = PLAY_HEIGHT - 200 # Height of NN vis area (can be adjusted)
+                nn_area_height = PLAY_HEIGHT - 200
                 
                 if BEST_GENOME_EVER_FOR_VIZ:
-                    # Ensure nn_area_width is positive before drawing
                     if nn_area_width > 0:
                          draw_neural_network(win, BEST_GENOME_EVER_FOR_VIZ, config, nn_area_x, nn_area_y, nn_area_width, nn_area_height)
 
-                # Draw current piece (already handled by grid if locked, need to draw falling)
                 temp_piece_draw = Piece(current_piece.x, current_piece.y, current_piece.shape)
                 temp_piece_draw.rotation = current_piece.rotation
-                temp_piece_draw.color = current_piece.color # Ensure color is set
+                temp_piece_draw.color = current_piece.color
                 formatted_shape_draw = convert_shape_format(temp_piece_draw)
                 for pos in formatted_shape_draw:
                     pygame.draw.rect(win, temp_piece_draw.color,
@@ -864,7 +865,7 @@ def eval_genomes(genomes, config):
                 run = False
 
 
-def run_neat(config_path):
+def run_neat(config_path, draw_while_training=True):
     config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                                 neat.DefaultSpeciesSet, neat.DefaultStagnation,
                                 config_path)
@@ -877,7 +878,9 @@ def run_neat(config_path):
     p.add_reporter(stats)
     # p.add_reporter(neat.Checkpointer(5)) # Save checkpoints every 5 generations
 
-    winner = p.run(eval_genomes, 50) # Run for 50 generations
+    # Use a lambda to pass the draw_while_training argument to eval_genomes
+    winner = p.run(lambda genomes, config_obj: eval_genomes(genomes, config_obj, draw_while_training), 50)
+
 
     # Save the winner
     # Also save the config with the winner for later loading if needed
@@ -1035,19 +1038,216 @@ def play_with_ai(genome_path, config_path=None):
     pygame.quit()
 
 
+def display_main_menu(surface, save_file_path):
+    font = pygame.font.SysFont('arial', 28, bold=True)
+    small_font = pygame.font.SysFont('arial', 18)
+    
+    button_width = 480
+    button_height = 70
+    button_spacing = 25
+    total_button_height = (button_height * 3) + (button_spacing * 2)
+    start_y = (S_HEIGHT - total_button_height) // 2 + 40
+    button_x = (S_WIDTH - button_width) // 2
+
+    button_train_draw_rect = pygame.Rect(button_x, start_y, button_width, button_height)
+    button_train_no_draw_rect = pygame.Rect(button_x, start_y + button_height + button_spacing, button_width, button_height)
+    button_play_saved_rect = pygame.Rect(button_x, start_y + 2 * (button_height + button_spacing), button_width, button_height)
+
+    model_exists = os.path.exists(save_file_path)
+
+    # Modern color scheme
+    colors = {
+        "background": (15, 15, 25),
+        "button_normal": (45, 55, 85),
+        "button_hover": (60, 75, 115),
+        "button_disabled": (40, 40, 50),
+        "button_border": (80, 100, 140),
+        "button_border_hover": (100, 130, 180),
+        "button_border_disabled": (60, 60, 70),
+        "text_normal": (255, 255, 255),
+        "text_disabled": (120, 120, 130),
+        "title_color": (220, 230, 255),
+        "subtitle_color": (160, 170, 200),
+        "shadow": (0, 0, 0, 100)
+    }
+
+    title_font = pygame.font.SysFont('arial', 64, bold=True)
+    subtitle_font = pygame.font.SysFont('arial', 20)
+    title_label = title_font.render('NEAT TETRIS AI', True, colors["title_color"])
+    subtitle_label = subtitle_font.render('Choose your training mode', True, colors["subtitle_color"])
+
+    clock = pygame.time.Clock()
+
+    def draw_button_with_shadow(surface, rect, bg_color, border_color, text, text_color, is_hovered=False):
+        # Draw shadow
+        shadow_rect = pygame.Rect(rect.x + 3, rect.y + 3, rect.width, rect.height)
+        shadow_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(shadow_surface, (0, 0, 0, 80), (0, 0, rect.width, rect.height), border_radius=12)
+        surface.blit(shadow_surface, shadow_rect.topleft)
+        
+        # Draw button background
+        pygame.draw.rect(surface, bg_color, rect, border_radius=12)
+        
+        # Draw border with gradient effect
+        border_width = 3 if is_hovered else 2
+        pygame.draw.rect(surface, border_color, rect, border_width, border_radius=12)
+        
+        # Add subtle inner highlight
+        if is_hovered:
+            highlight_rect = pygame.Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height // 3)
+            highlight_surface = pygame.Surface((highlight_rect.width, highlight_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(highlight_surface, (255, 255, 255, 20), (0, 0, highlight_rect.width, highlight_rect.height), border_radius=8)
+            surface.blit(highlight_surface, highlight_rect.topleft)
+        
+        # Draw text
+        text_surface = font.render(text, True, text_color)
+        text_x = rect.centerx - text_surface.get_width() // 2
+        text_y = rect.centery - text_surface.get_height() // 2
+        surface.blit(text_surface, (text_x, text_y))
+
+    while True:
+        # Create gradient background
+        for y in range(S_HEIGHT):
+            color_ratio = y / S_HEIGHT
+            r = int(colors["background"][0] * (1 - color_ratio * 0.3))
+            g = int(colors["background"][1] * (1 - color_ratio * 0.3))
+            b = int(colors["background"][2] + color_ratio * 15)
+            pygame.draw.line(surface, (r, g, b), (0, y), (S_WIDTH, y))
+
+        # Draw title with shadow
+        title_shadow_x = S_WIDTH//2 - title_label.get_width()//2 + 2
+        title_shadow_y = start_y - title_label.get_height() - 80 + 2
+        title_shadow = title_font.render('NEAT TETRIS AI', True, (0, 0, 0))
+        surface.blit(title_shadow, (title_shadow_x, title_shadow_y))
+        
+        title_x = S_WIDTH//2 - title_label.get_width()//2
+        title_y = start_y - title_label.get_height() - 80
+        surface.blit(title_label, (title_x, title_y))
+        
+        # Draw subtitle
+        subtitle_x = S_WIDTH//2 - subtitle_label.get_width()//2
+        subtitle_y = title_y + title_label.get_height() + 10
+        surface.blit(subtitle_label, (subtitle_x, subtitle_y))
+
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Button 1: Train and Draw
+        is_hovered_1 = button_train_draw_rect.collidepoint(mouse_pos)
+        button_color_1 = colors["button_hover"] if is_hovered_1 else colors["button_normal"]
+        border_color_1 = colors["button_border_hover"] if is_hovered_1 else colors["button_border"]
+        draw_button_with_shadow(surface, button_train_draw_rect, button_color_1, border_color_1, 
+                               'Train AI (with Visualization)', colors["text_normal"], is_hovered_1)
+
+        # Button 2: Train without Drawing
+        is_hovered_2 = button_train_no_draw_rect.collidepoint(mouse_pos)
+        button_color_2 = colors["button_hover"] if is_hovered_2 else colors["button_normal"]
+        border_color_2 = colors["button_border_hover"] if is_hovered_2 else colors["button_border"]
+        draw_button_with_shadow(surface, button_train_no_draw_rect, button_color_2, border_color_2,
+                               'Train AI (No Visualization - Faster)', colors["text_normal"], is_hovered_2)
+
+        # Button 3: Play Saved Model
+        can_click_play = model_exists
+        is_hovered_3 = button_play_saved_rect.collidepoint(mouse_pos) and can_click_play
+        
+        if not model_exists:
+            button_color_3 = colors["button_disabled"]
+            border_color_3 = colors["button_border_disabled"]
+            text_color_3 = colors["text_disabled"]
+        else:
+            button_color_3 = colors["button_hover"] if is_hovered_3 else colors["button_normal"]
+            border_color_3 = colors["button_border_hover"] if is_hovered_3 else colors["button_border"]
+            text_color_3 = colors["text_normal"]
+        
+        draw_button_with_shadow(surface, button_play_saved_rect, button_color_3, border_color_3,
+                               'Play with Saved AI', text_color_3, is_hovered_3)
+        
+        # Draw status message for disabled button
+        if not model_exists:
+            status_msg = small_font.render('(No saved AI model found)', True, colors["text_disabled"])
+            status_x = button_play_saved_rect.centerx - status_msg.get_width() // 2
+            status_y = button_play_saved_rect.bottom + 12
+            surface.blit(status_msg, (status_x, status_y))
+
+        # Draw instructions at bottom
+        instruction_text = "Press Q to quit • Click a button to continue"
+        instruction_surface = small_font.render(instruction_text, True, colors["subtitle_color"])
+        instruction_x = S_WIDTH//2 - instruction_surface.get_width()//2
+        instruction_y = S_HEIGHT - 40
+        surface.blit(instruction_surface, (instruction_x, instruction_y))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    if button_train_draw_rect.collidepoint(mouse_pos):
+                        return "train_draw"
+                    if button_train_no_draw_rect.collidepoint(mouse_pos):
+                        return "train_no_draw"
+                    if can_click_play and button_play_saved_rect.collidepoint(mouse_pos):
+                        return "play_saved"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:
+                    return "quit"
+
+        pygame.display.update()
+        clock.tick(60)
+
+
 if __name__ == '__main__':
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'config-feedforward.txt')
-    
-    # To train:
-    # run_neat(config_path)
-
-    # To play with a saved AI:
     best_ai_path = os.path.join(local_dir, 'best_tetris_ai.pkl')
-    if os.path.exists(best_ai_path):
-         play_with_ai(best_ai_path, config_path) # Pass config_path for fallback
-    else:
-        print("No saved AI found. Training a new one...")
-        run_neat(config_path)
-        print("Training finished. Now playing with the best AI.")
-        play_with_ai(best_ai_path, config_path)
+
+    # Initialize Pygame modules
+    pygame.init() # General Pygame init
+    # pygame.font.init() # Already called globally, but doesn't hurt if called again or can be removed if already at top
+    # pygame.mixer.init() # Already called globally
+
+    win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
+    pygame.display.set_caption("NEAT Tetris AI")
+
+    running_menu = True
+    action_taken = False # To prevent re-showing menu if an action was taken
+
+    while running_menu:
+        choice = display_main_menu(win, best_ai_path)
+
+        if choice == "train_draw":
+            print("Starting training with game drawing...")
+            run_neat(config_path, draw_while_training=True)
+            action_taken = True
+            if os.path.exists(best_ai_path):
+                print("Training finished. Playing with the best AI.")
+                play_with_ai(best_ai_path, config_path) # play_with_ai handles its own pygame.quit()
+            else:
+                print("Training finished, but no AI was saved (or an error occurred).")
+            running_menu = False 
+        elif choice == "train_no_draw":
+            print("Starting training without game drawing (faster)...")
+            run_neat(config_path, draw_while_training=False)
+            action_taken = True
+            if os.path.exists(best_ai_path):
+                print("Training finished. Playing with the best AI.")
+                play_with_ai(best_ai_path, config_path)
+            else:
+                print("Training finished, but no AI was saved (or an error occurred).")
+            running_menu = False
+        elif choice == "play_saved":
+            if os.path.exists(best_ai_path):
+                print("Playing with saved AI...")
+                play_with_ai(best_ai_path, config_path)
+                action_taken = True
+            else:
+                # This case should ideally not be reached if button is properly disabled,
+                # but good to have a fallback message.
+                print("Saved AI not found. Please train an AI first.")
+            running_menu = False 
+        elif choice == "quit":
+            running_menu = False
+
+    pygame.quit()
+    # Using quit() for a cleaner exit if the script is run directly
+    # For example, if launched from a terminal, this ensures the process terminates.
+    import sys
+    sys.exit()
