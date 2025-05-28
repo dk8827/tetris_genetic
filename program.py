@@ -795,55 +795,6 @@ if __name__ == '__main__':
 
     if not os.path.exists(config_path):
         print(f"Error: NEAT configuration file '{config_path}' not found.")
-        print("Please create a 'config-feedforward.txt' file in the same directory as the script.")
-        print("A sample config requires num_inputs = 4 for the current AI.")
-        # Example:
-        # [NEAT]
-        # fitness_criterion     = max
-        # fitness_threshold     = 100000 
-        # pop_size              = 50
-        # reset_on_extinction   = False
-        # [DefaultGenome]
-        # num_inputs              = 4
-        # num_hidden              = 0 
-        # num_outputs             = 1
-        # initial_connection      = full_direct
-        # feed_forward            = True
-        # activation_default      = tanh
-        # activation_mutate_rate  = 0.0
-        # activation_options      = tanh
-        # aggregation_default     = sum
-        # aggregation_mutate_rate = 0.0
-        # aggregation_options     = sum
-        # bias_init_mean          = 0.0
-        # bias_init_stdev         = 1.0
-        # bias_max_value          = 30.0
-        # bias_min_value          = -30.0
-        # bias_mutate_power       = 0.5
-        # bias_mutate_rate        = 0.7
-        # bias_replace_rate       = 0.1
-        # compatibility_disjoint_coefficient = 1.0
-        # compatibility_weight_coefficient = 0.5
-        # conn_add_prob           = 0.5
-        # conn_delete_prob        = 0.5
-        # enabled_default         = True
-        # enabled_mutate_rate     = 0.01
-        # node_add_prob           = 0.2
-        # node_delete_prob        = 0.2
-        # response_init_mean      = 1.0
-        # response_init_stdev     = 0.0
-        # response_max_value      = 30.0
-        # response_min_value      = -30.0
-        # response_mutate_power   = 0.0
-        # response_mutate_rate    = 0.0
-        # response_replace_rate   = 0.0
-        # weight_init_mean        = 0.0
-        # weight_init_stdev       = 1.0
-        # weight_max_value        = 30
-        # weight_min_value        = -30
-        # weight_mutate_power     = 0.5
-        # weight_mutate_rate      = 0.8
-        # weight_replace_rate     = 0.1
         pygame.quit()
         exit()
 
