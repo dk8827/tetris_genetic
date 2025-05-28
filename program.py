@@ -214,7 +214,7 @@ def draw_text_middle(text, size, color, surface): # size param means dynamic fon
     font = pygame.font.SysFont('comicsans', size, bold=True)
     label = font.render(text, 1, color)
     surface.blit(label, (TOP_LEFT_X + PLAY_WIDTH/2 - (label.get_width()/2),
-                         TOP_LEFT_Y + PLAY_HEIGHT/2 - label.get_height()/2 - 150))
+                         TOP_LEFT_Y + PLAY_HEIGHT/2 - label.get_height()/2 - 150)) # Adjusted y-offset for general use
 
 def draw_grid_lines(surface, grid_rows): # Parameter renamed for clarity
     sx = TOP_LEFT_X
@@ -227,13 +227,16 @@ def draw_grid_lines(surface, grid_rows): # Parameter renamed for clarity
         pygame.draw.line(surface, (128,128,128), (sx + j*BLOCK_SIZE, sy), (sx + j*BLOCK_SIZE, sy + PLAY_HEIGHT))
 
 
-def clear_rows(grid, locked): # grid is passed but not directly used for modification logic, locked is key
+def clear_rows(grid, locked): # grid parameter is used for dimensions
     increment = 0
     rows_to_clear = []
-    for i in range(len(grid)-1, -1, -1): # Iterate from bottom up
+    num_rows = len(grid)
+    num_cols = len(grid[0])
+
+    for i in range(num_rows - 1, -1, -1): # Iterate from bottom up
         row_is_full = True
-        for j in range(len(grid[0])):
-            if grid[i][j] == (0,0,0): 
+        for j in range(num_cols):
+            if (j, i) not in locked: # Check fullness based on locked_positions
                 row_is_full = False
                 break
         if row_is_full:
@@ -242,7 +245,7 @@ def clear_rows(grid, locked): # grid is passed but not directly used for modific
             for j_col in range(len(grid[0])):
                 if (j_col, i) in locked:
                     del locked[(j_col, i)]
-    
+
     if increment > 0:
         new_locked = {}
         # Sort keys by y-value to process correctly when shifting
@@ -252,10 +255,10 @@ def clear_rows(grid, locked): # grid is passed but not directly used for modific
             num_cleared_below = sum(1 for r_cleared in rows_to_clear if y_lock < r_cleared)
             new_y = y_lock + num_cleared_below
             new_locked[(x_lock, new_y)] = locked[(x_lock, y_lock)]
-        
+
         locked.clear()
         locked.update(new_locked)
-        
+
     return increment
 
 
@@ -264,51 +267,99 @@ def draw_next_shape(piece, surface): # piece is next_piece
 
     sx = TOP_LEFT_X + PLAY_WIDTH + 30
     sy = TOP_LEFT_Y + PLAY_HEIGHT/2 - 150
+
+    # Use the precalculated relative coordinates for drawing the next shape consistently
+    # We need to find the min_x, min_y to offset the drawing properly within the small preview box
+    # Let's assume a 5x5 block area for preview for simplicity, similar to original string format
+    preview_box_size_blocks = 5
+    preview_block_size = BLOCK_SIZE * 0.7 # Smaller blocks for preview
     
-    shape_format_strings = shapes[piece.shape_idx][piece.rotation % piece.num_rotations]
+    # Center the drawing area for the next piece
+    preview_area_width = preview_box_size_blocks * preview_block_size
+    preview_area_height = preview_box_size_blocks * preview_block_size 
+    
+    # The sx, sy for label is fine, but for shape, let's be more precise
+    shape_draw_sx = sx + (preview_box_size_blocks * BLOCK_SIZE - preview_area_width) / 2 # Original assumed 5*BLOCK_SIZE for label centering
+    shape_draw_sy = sy + preview_block_size # A bit of space below the label
 
-    for i, line in enumerate(shape_format_strings): 
-        for j, column_char in enumerate(line): 
-            if column_char == '0':
-                pygame.draw.rect(surface, piece.color, 
-                                 (sx + j*BLOCK_SIZE, sy + i*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
+    # Get relative coords, then find bounds to normalize for drawing
+    relative_coords = piece.get_relative_coords()
+    if not relative_coords: return
 
-    surface.blit(label, (sx + (5*BLOCK_SIZE - label.get_width())/2, sy - label.get_height() - 5))
+    min_rel_x = min(c[0] for c in relative_coords)
+    max_rel_x = max(c[0] for c in relative_coords)
+    min_rel_y = min(c[1] for c in relative_coords)
+    max_rel_y = max(c[1] for c in relative_coords)
+
+    # Calculate offsets to draw piece centered in preview area
+    # The original shape format was 5x5. get_relative_coords uses (j-2, i-4)
+    # We want to draw it as if it's in a small grid. Let's use the middle of the 5x5 area.
+    # Effective (0,0) for piece drawing is (shape_draw_sx + 2*preview_block_size, shape_draw_sy + 2*preview_block_size)
+    # if we use a similar offset logic as the piece definition.
+
+    for dx, dy in relative_coords:
+        # The original shape string (5x5) had '0's. i-4 implies reference point is near bottom.
+        # j-2 implies reference point is middle horizontally.
+        # To draw, shift these relative coords so they fit in a small positive-coord box.
+        # Let's assume the piece.get_relative_coords() gives piece-centric coords (pivot is 0,0).
+        # We need to shift this to be viewable.
+        # A simple way: use the original string format for preview as it was simpler.
+        
+        # Revert to simpler drawing using original string formats for next shape (less processing)
+        shape_format_strings = shapes[piece.shape_idx][piece.rotation % piece.num_rotations]
+        for i, line in enumerate(shape_format_strings):
+            for j, column_char in enumerate(line):
+                if column_char == '0':
+                    pygame.draw.rect(surface, piece.color,
+                                     (shape_draw_sx + j*preview_block_size, shape_draw_sy + i*preview_block_size,
+                                      preview_block_size, preview_block_size), 0)
+        break # Only need to do this once as shape_format_strings is now outer loop
+
+    surface.blit(label, (sx + (preview_box_size_blocks * BLOCK_SIZE - label.get_width())/2, sy - label.get_height() - 5))
 
 
-def draw_window(surface, grid, score=0, last_score = 0, generation=0, population_size=0, genome_id=0):
+def draw_window(surface, grid, score=0, last_score = 0, generation=None, population_size=None, genome_id=None): # Added None defaults
     surface.fill((0,0,0))
 
     score_label = FONT_COMICSANS_30.render('Score: ' + str(score), 1, (255,255,255))
     sx_info = TOP_LEFT_X + PLAY_WIDTH + 30
-    sy_info_start = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50 
-    surface.blit(score_label, (sx_info, sy_info_start + 150)) 
+    sy_info_start = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50
+    surface.blit(score_label, (sx_info, sy_info_start + 150))
 
     max_score_label = FONT_COMICSANS_30.render('Max Score: ' + str(last_score), 1, (255,255,255))
     max_score_x = TOP_LEFT_X - max_score_label.get_width() - 30
-    max_score_y = sy_info_start 
+    max_score_y = sy_info_start
     surface.blit(max_score_label, (max_score_x, max_score_y))
 
-    gen_text = f"Gen: {generation}"
-    pop_text = f"Pop: {population_size}"
-    genome_text = f"Genome: {genome_id}"
-    
-    gen_label = FONT_COMICSANS_20.render(gen_text, 1, (255,255,255))
-    pop_label = FONT_COMICSANS_20.render(pop_text, 1, (255,255,255))
-    genome_label = FONT_COMICSANS_20.render(genome_text, 1, (255,255,255))
-
+    # Conditionally draw AI-specific info or Human Player mode
     text_start_y = max_score_y + max_score_label.get_height() + 10
-    surface.blit(gen_label, (max_score_x, text_start_y))
-    surface.blit(pop_label, (max_score_x, text_start_y + gen_label.get_height() + 5))
-    surface.blit(genome_label, (max_score_x, text_start_y + gen_label.get_height() + pop_label.get_height() + 10))
+    if generation is not None and population_size is not None and genome_id is not None:
+        gen_text = f"Gen: {generation}"
+        pop_text = f"Pop: {population_size}"
+        genome_text = f"Genome: {genome_id}"
+
+        gen_label = FONT_COMICSANS_20.render(gen_text, 1, (255,255,255))
+        pop_label = FONT_COMICSANS_20.render(pop_text, 1, (255,255,255))
+        genome_label = FONT_COMICSANS_20.render(genome_text, 1, (255,255,255))
+
+        surface.blit(gen_label, (max_score_x, text_start_y))
+        surface.blit(pop_label, (max_score_x, text_start_y + gen_label.get_height() + 5))
+        surface.blit(genome_label, (max_score_x, text_start_y + gen_label.get_height() + pop_label.get_height() + 10))
+    else: # Human player or general mode
+        human_mode_label = FONT_COMICSANS_20.render("Mode: Human Player", 1, (255,255,255))
+        surface.blit(human_mode_label, (max_score_x, text_start_y))
+        # Could add Level info here for human player
+        # level_label = FONT_COMICSANS_20.render(f"Level: {current_level}", 1, (255,255,255))
+        # surface.blit(level_label, (max_score_x, text_start_y + human_mode_label.get_height() + 5))
+
 
     for r in range(len(grid)):
         for c in range(len(grid[r])):
-            if grid[r][c] != (0,0,0): 
+            if grid[r][c] != (0,0,0):
                 pygame.draw.rect(surface, grid[r][c],
                                  (TOP_LEFT_X + c*BLOCK_SIZE, TOP_LEFT_Y + r*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
-    draw_grid_lines(surface, len(grid)) 
+    draw_grid_lines(surface, len(grid))
     pygame.draw.rect(surface, (255,0,0), (TOP_LEFT_X, TOP_LEFT_Y, PLAY_WIDTH, PLAY_HEIGHT), 5) # Border
 
 
@@ -336,17 +387,17 @@ def determine_best_ai_move(current_piece_shape_idx, grid, locked_positions, net)
 
     for r_idx in range(sim_piece_template.num_rotations):
         sim_piece_template.rotation = r_idx
-        
+
         current_rel_coords = sim_piece_template.get_relative_coords()
         if not current_rel_coords: continue
 
         min_dx = min(coord[0] for coord in current_rel_coords)
         max_dx = max(coord[0] for coord in current_rel_coords)
-        
+
         for c_anchor_x in range(-min_dx, 10 - max_dx):
             sim_piece_template.x = c_anchor_x
-            sim_piece_template.y = 0 
-            
+            sim_piece_template.y = 0
+
             sim_piece_for_drop = Piece(sim_piece_template.x, sim_piece_template.y, sim_piece_template.shape_idx)
             sim_piece_for_drop.rotation = sim_piece_template.rotation
 
@@ -355,28 +406,28 @@ def determine_best_ai_move(current_piece_shape_idx, grid, locked_positions, net)
             sim_piece_for_drop.y -= 1
 
             formatted_dropped_piece = convert_shape_format(sim_piece_for_drop)
-            
+
             hypothetical_locked_positions = locked_positions.copy()
             for x_coord, y_coord in formatted_dropped_piece:
-                hypothetical_locked_positions[(x_coord, y_coord)] = sim_piece_for_drop.color 
+                hypothetical_locked_positions[(x_coord, y_coord)] = sim_piece_for_drop.color
 
             if check_lost(hypothetical_locked_positions):
                 continue
 
-            temp_grid_with_piece = [row[:] for row in grid] 
+            temp_grid_with_piece = [row[:] for row in grid]
             for x_c, y_c in formatted_dropped_piece:
-                if 0 <= x_c < 10 and 0 <= y_c < 20: 
+                if 0 <= x_c < 10 and 0 <= y_c < 20:
                     temp_grid_with_piece[y_c][x_c] = sim_piece_for_drop.color
-            
+
             heights_after = [0] * 10
             for c in range(10):
                 for r_h in range(20):
                     if temp_grid_with_piece[r_h][c] != (0,0,0):
                         heights_after[c] = 20 - r_h
-                        break 
-            
+                        break
+
             agg_height_after = sum(heights_after)
-            
+
             holes_after = 0
             for c in range(10):
                 col_has_block = False
@@ -385,7 +436,7 @@ def determine_best_ai_move(current_piece_shape_idx, grid, locked_positions, net)
                         col_has_block = True
                     elif col_has_block and temp_grid_with_piece[r_h][c] == (0,0,0):
                         holes_after += 1
-                                
+
             bumpiness_after = 0
             for i in range(9):
                 bumpiness_after += abs(heights_after[i] - heights_after[i+1])
@@ -394,21 +445,21 @@ def determine_best_ai_move(current_piece_shape_idx, grid, locked_positions, net)
             for r_idx_clear in range(19, -1, -1):
                 if all(cell != (0,0,0) for cell in temp_grid_with_piece[r_idx_clear]):
                     lines_cleared_by_this_move += 1
-            
+
             move_inputs = (
                 agg_height_after / 200.0,
                 lines_cleared_by_this_move / 4.0,
                 holes_after / 200.0,
-                bumpiness_after / 180.0 
+                bumpiness_after / 180.0
             )
-            
+
             output = net.activate(move_inputs)
             current_move_score = output[0]
 
             if current_move_score > best_move_score:
                 best_move_score = current_move_score
                 best_move_details = (sim_piece_for_drop.x, sim_piece_for_drop.rotation, sim_piece_for_drop.y)
-    
+
     return best_move_details
 
 
@@ -446,7 +497,7 @@ def draw_neural_network(surface, genome, config, x_start, y_start, width, height
     output_keys = list(config.genome_config.output_keys)
     genome_nodes_present = genome.nodes if hasattr(genome, 'nodes') else {}
     potential_hidden_nodes = set(genome_nodes_present.keys()) - set(input_keys) - set(output_keys)
-    
+
     layers_for_drawing = [set(input_keys)]
     if potential_hidden_nodes: layers_for_drawing.append(potential_hidden_nodes)
     layers_for_drawing.append(set(output_keys))
@@ -472,11 +523,11 @@ def draw_neural_network(surface, genome, config, x_start, y_start, width, height
         if not layer_nodes: continue
         num_nodes_in_layer = len(layer_nodes)
         current_layer_x = layer_x_positions[i]
-        
+
         total_node_height = num_nodes_in_layer * (2 * node_radius)
         effective_spacing_y = (content_height - total_node_height) / (num_nodes_in_layer -1) if num_nodes_in_layer > 1 else 0
         effective_spacing_y = max(min(effective_spacing_y, node_spacing_y_within_layer * 1.5), node_spacing_y_within_layer / 2 if num_nodes_in_layer > 1 else 0)
-        
+
         start_y_for_layer = (content_height - (total_node_height + max(0, num_nodes_in_layer - 1) * effective_spacing_y)) / 2
         start_y_for_layer = max(start_y_for_layer, 0)
 
@@ -515,13 +566,13 @@ def eval_genomes(genomes, config, draw_while_training=True):
         win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
         pygame.display.set_caption(f"NEAT Tetris - Gen: {GENERATION_COUNT}")
 
-    for genome_id_tuple, genome in genomes: 
-        actual_genome_id = genome_id_tuple 
+    for genome_id_tuple, genome in genomes:
+        actual_genome_id = genome_id_tuple
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         genome.fitness = 0
 
         locked_positions = {}
-        grid = create_grid(locked_positions) 
+        grid = create_grid(locked_positions)
         current_piece = get_shape()
         next_piece = get_shape()
         clock = pygame.time.Clock()
@@ -532,17 +583,17 @@ def eval_genomes(genomes, config, draw_while_training=True):
         run_genome = True
         while run_genome:
             game_frames += 1
-            clock.tick() 
+            clock.tick()
 
             # --- AI: Determine best move ---
             best_move_details = determine_best_ai_move(
                 current_piece.shape_idx, grid, locked_positions, net
             )
-            
+
             # --- Execute the best move ---
             if best_move_details:
                 current_piece.x, current_piece.rotation, current_piece.y = best_move_details
-                
+
                 shape_pos_to_lock = convert_shape_format(current_piece)
                 for p_x, p_y in shape_pos_to_lock:
                     # Allow locking pieces partially or fully above the visible grid
@@ -551,25 +602,25 @@ def eval_genomes(genomes, config, draw_while_training=True):
 
                 grid = create_grid(locked_positions)
 
-                cleared_rows_count = clear_rows(grid, locked_positions) 
+                cleared_rows_count = clear_rows(grid, locked_positions)
                 if cleared_rows_count > 0:
-                    grid = create_grid(locked_positions) 
+                    grid = create_grid(locked_positions)
 
                 total_lines_cleared_genome += cleared_rows_count
-                
+
                 score_map = {1: 40, 2: 100, 3: 300, 4: 1200}
                 score += score_map.get(cleared_rows_count, 0)
-                
-                genome.fitness += cleared_rows_count * 10  
-                if cleared_rows_count == 4: genome.fitness += 5 
-                genome.fitness += 0.1 
+
+                genome.fitness += cleared_rows_count * 10
+                if cleared_rows_count == 4: genome.fitness += 5
+                genome.fitness += 0.1
 
                 current_piece = next_piece
                 next_piece = get_shape()
 
                 if score > MAX_SCORE_SO_FAR: MAX_SCORE_SO_FAR = score
             else:
-                genome.fitness -= 10 
+                genome.fitness -= 10
                 run_genome = False
                 continue
 
@@ -579,7 +630,7 @@ def eval_genomes(genomes, config, draw_while_training=True):
                     for r_row in range(20):
                         if grid[r_row][c_col] != (0,0,0):
                             heights_final[c_col] = 20 - r_row; break
-                genome.fitness -= sum(heights_final) * 0.05 
+                genome.fitness -= sum(heights_final) * 0.05
                 run_genome = False
 
             if genome.fitness is not None and genome.fitness > HIGHEST_FITNESS_EVER_FOR_VIZ:
@@ -589,8 +640,8 @@ def eval_genomes(genomes, config, draw_while_training=True):
             if draw_while_training:
                 draw_window(win, grid, score, MAX_SCORE_SO_FAR, GENERATION_COUNT, len(genomes), actual_genome_id)
                 draw_next_shape(next_piece, win)
-                
-                nn_area_x = TOP_LEFT_X + PLAY_WIDTH + 30 + 5*BLOCK_SIZE + 20 
+
+                nn_area_x = TOP_LEFT_X + PLAY_WIDTH + 30 + 5*BLOCK_SIZE + 20
                 nn_area_y = TOP_LEFT_Y + 50
                 nn_area_width = S_WIDTH - nn_area_x - 20
                 nn_area_height = PLAY_HEIGHT - 200
@@ -603,7 +654,7 @@ def eval_genomes(genomes, config, draw_while_training=True):
                 if event.type == pygame.QUIT: pygame.quit(); import sys; sys.exit()
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_q: pygame.quit(); import sys; sys.exit()
 
-            if game_frames > 1500 + (total_lines_cleared_genome * 100): 
+            if game_frames > 1500 + (total_lines_cleared_genome * 100):
                 run_genome = False
 
 
@@ -631,7 +682,7 @@ def play_with_ai(genome_path, config_path=None):
             data = pickle.load(f)
             if isinstance(data, tuple) and len(data) == 2 and isinstance(data[1], neat.Config):
                 genome, loaded_config = data
-            else: genome = data 
+            else: genome = data
     except FileNotFoundError:
         print(f"Error: Genome file not found at {genome_path}")
         return
@@ -650,12 +701,12 @@ def play_with_ai(genome_path, config_path=None):
     elif not loaded_config:
         print("Error: AI config not found with genome and no fallback config_path provided.")
         return
-    
-    config = loaded_config 
+
+    config = loaded_config
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
     pygame.display.set_caption("Tetris - AI Playing")
-    
+
     locked_positions = {}
     grid = create_grid(locked_positions)
     current_piece = get_shape()
@@ -663,66 +714,329 @@ def play_with_ai(genome_path, config_path=None):
     clock = pygame.time.Clock()
     score = 0
     run_ai_play = True
-    
+
     print("Playing with the best AI. Press Q to quit.")
 
     while run_ai_play:
-        grid = create_grid(locked_positions) 
-        clock.tick(10) 
+        grid = create_grid(locked_positions)
+        clock.tick(10) # AI can play faster
 
         # --- AI Decision Making ---
         best_move_details = determine_best_ai_move(
             current_piece.shape_idx, grid, locked_positions, net
         )
-        
+
         if best_move_details:
             current_piece.x, current_piece.rotation, current_piece.y = best_move_details
             shape_pos_to_lock = convert_shape_format(current_piece)
             for p_x, p_y in shape_pos_to_lock:
                 locked_positions[(p_x, p_y)] = current_piece.color # Allow locking above grid
-            
-            grid = create_grid(locked_positions) 
+
+            grid = create_grid(locked_positions)
             cleared_rows_count = clear_rows(grid, locked_positions)
             if cleared_rows_count > 0:
                 grid = create_grid(locked_positions)
 
             score_map = {1: 40, 2: 100, 3: 300, 4: 1200}
             score += score_map.get(cleared_rows_count, 0)
-            
+
             current_piece = next_piece
             next_piece = get_shape()
         else:
             print("AI found no valid move. Game Over.")
-            run_ai_play = False
+            run_ai_play = False # Game over for AI
 
         if check_lost(locked_positions):
             print(f"Game Over! Final Score: {score}")
             run_ai_play = False
 
-        draw_window(win, grid, score, MAX_SCORE_SO_FAR) 
+        # Pass None for AI-specific stats, or could pass dummy values if preferred
+        draw_window(win, grid, score, MAX_SCORE_SO_FAR, generation=None, population_size=None, genome_id=None)
         draw_next_shape(next_piece, win)
-        # Optionally, draw the AI's chosen piece placement briefly before it locks
-        # (current_piece before it's swapped to next_piece)
-        # For now, the hard drop means it locks instantly and is drawn as part of the grid.
         pygame.display.update()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT: run_ai_play = False
             if event.type == pygame.KEYDOWN and event.key == pygame.K_q: run_ai_play = False
+
+    pygame.quit() # Quit pygame when AI play is done
+
+
+# --- Human Play Game Function ---
+def human_play_game():
+    win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
+    pygame.display.set_caption("Tetris - Human Player")
+
+    locked_positions = {}
+    current_piece = get_shape()
+    next_piece = get_shape()
+    clock = pygame.time.Clock()
+    score = 0
+    level = 1
+    lines_cleared_total = 0
+
+    fall_time = 0
+    initial_fall_speed = 0.40 # Seconds per drop initially
+    fall_speed = initial_fall_speed
     
-    pygame.quit()
+    # DAS (Delayed Auto Shift) and ARR (Auto Repeat Rate) for horizontal movement
+    time_since_last_h_input = 0 
+    h_move_delay_first = 200 # ms before auto-repeat starts after first press
+    h_move_interval_repeat = 50  # ms between auto-repeats
+    h_key_down_time = {pygame.K_LEFT: 0, pygame.K_RIGHT: 0} # Track hold time for each key
+
+    # Soft drop speed
+    time_since_last_v_input = 0
+    v_move_interval = 40 # ms for soft drop repeats
+
+    run_game = True
+    paused = False
+    game_over_displayed = False
+
+    # Use a local high score for human play session
+    session_high_score = 0 
+    try: # Try to load a human high score if it exists
+        with open("human_highscore.txt", "r") as f:
+            session_high_score = int(f.read())
+    except (FileNotFoundError, ValueError):
+        session_high_score = 0
+
+
+    while run_game:
+        grid = create_grid(locked_positions) 
+
+        delta_time_ms = clock.get_rawtime() # Time in milliseconds since last frame
+        if not paused and not game_over_displayed:
+            fall_time += delta_time_ms
+            time_since_last_h_input += delta_time_ms
+            time_since_last_v_input += delta_time_ms
+
+        # --- Game Logic: Automatic Piece Fall ---
+        if not paused and not game_over_displayed and fall_time / 1000 > fall_speed:
+            fall_time = 0
+            current_piece.y += 1
+            if not valid_space(current_piece, grid):
+                current_piece.y -= 1
+                # Lock piece
+                shape_pos = convert_shape_format(current_piece)
+                for pos_x, pos_y in shape_pos:
+                    locked_positions[(pos_x, pos_y)] = current_piece.color
+                
+                current_piece = next_piece
+                next_piece = get_shape()
+                
+                cleared_lines = clear_rows(grid, locked_positions) 
+                grid = create_grid(locked_positions) # Update grid for check_lost
+
+                if cleared_lines > 0:
+                    lines_cleared_total += cleared_lines
+                    score_map = {1: 40, 2: 100, 3: 300, 4: 1200}
+                    score += score_map.get(cleared_lines, 0) * level
+                    
+                    # Level up every 10 lines
+                    if lines_cleared_total // 10 >= level :
+                         level = (lines_cleared_total // 10) +1
+                         fall_speed = max(0.05, initial_fall_speed - (level-1)*0.03)
+
+
+                if score > session_high_score:
+                    session_high_score = score
+
+                if check_lost(locked_positions):
+                    game_over_displayed = True # Enter game over state
+
+        # --- Event Handling ---
+        keys_pressed_now = pygame.key.get_pressed()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run_game = False
+            
+            if event.type == pygame.KEYDOWN:
+                if game_over_displayed: # Any key press exits game over screen
+                    run_game = False
+                    continue
+
+                if event.key == pygame.K_p:
+                    paused = not paused
+                    if paused: 
+                        # Draw pause message immediately (will be redrawn in main draw section)
+                        pause_label_temp = FONT_COMICSANS_60.render("PAUSED", 1, (255, 255, 0))
+                        win.blit(pause_label_temp, (TOP_LEFT_X + PLAY_WIDTH/2 - pause_label_temp.get_width()/2,
+                                   TOP_LEFT_Y + PLAY_HEIGHT/3 - pause_label_temp.get_height()/2)) # Higher up
+                        pygame.display.update()
+                    continue 
+
+                if paused: continue
+
+                if event.key == pygame.K_LEFT:
+                    current_piece.x -= 1
+                    if not valid_space(current_piece, grid): current_piece.x += 1
+                    h_key_down_time[pygame.K_LEFT] = pygame.time.get_ticks()
+                    h_key_down_time[pygame.K_RIGHT] = 0 # Reset other direction
+                    time_since_last_h_input = -h_move_delay_first # Trigger delay for repeat
+                
+                elif event.key == pygame.K_RIGHT:
+                    current_piece.x += 1
+                    if not valid_space(current_piece, grid): current_piece.x -= 1
+                    h_key_down_time[pygame.K_RIGHT] = pygame.time.get_ticks()
+                    h_key_down_time[pygame.K_LEFT] = 0
+                    time_since_last_h_input = -h_move_delay_first
+
+                elif event.key == pygame.K_DOWN: # Soft drop
+                    current_piece.y += 1
+                    if not valid_space(current_piece, grid):
+                        current_piece.y -= 1
+                    else:
+                        score += 1 # Small score for soft dropping
+                        fall_time = 0 # Reset auto-fall timer
+                    time_since_last_v_input = 0
+
+                elif event.key == pygame.K_SPACE: # Rotate
+                    current_piece.rotation = (current_piece.rotation + 1) % current_piece.num_rotations
+                    if not valid_space(current_piece, grid): # Basic wall kick attempt (try moving piece slightly)
+                        # Try moving right
+                        current_piece.x +=1
+                        if not valid_space(current_piece, grid):
+                            current_piece.x -=2 # Try moving left from original
+                            if not valid_space(current_piece, grid):
+                                current_piece.x +=1 # Back to original x
+                                current_piece.rotation = (current_piece.rotation - 1 + current_piece.num_rotations) % current_piece.num_rotations # Revert rotation
+                        
+                elif event.key == pygame.K_UP: # Hard Drop
+                    original_y = current_piece.y
+                    while valid_space(current_piece, grid):
+                        current_piece.y += 1
+                    current_piece.y -= 1
+                    dropped_dist = current_piece.y - original_y
+                    score += dropped_dist * 2 
+
+                    # Lock piece immediately
+                    shape_pos = convert_shape_format(current_piece)
+                    for pos_x, pos_y in shape_pos:
+                        locked_positions[(pos_x, pos_y)] = current_piece.color
+                    
+                    current_piece = next_piece
+                    next_piece = get_shape()
+                    
+                    cleared_lines = clear_rows(grid, locked_positions)
+                    grid = create_grid(locked_positions)
+
+                    if cleared_lines > 0:
+                        lines_cleared_total += cleared_lines
+                        score_map = {1: 40, 2: 100, 3: 300, 4: 1200}
+                        score += score_map.get(cleared_lines, 0) * level
+                        if lines_cleared_total // 10 >= level :
+                             level = (lines_cleared_total // 10) +1
+                             fall_speed = max(0.05, initial_fall_speed - (level-1)*0.03)
+
+                    if score > session_high_score: session_high_score = score
+                    if check_lost(locked_positions): game_over_displayed = True
+                    fall_time = 0 
+
+                elif event.key == pygame.K_q: 
+                    run_game = False
+            
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_LEFT: h_key_down_time[pygame.K_LEFT] = 0
+                elif event.key == pygame.K_RIGHT: h_key_down_time[pygame.K_RIGHT] = 0
+
+        # --- Handle continuous key presses (auto-repeat for left/right, faster soft drop) ---
+        if not paused and not game_over_displayed:
+            current_ticks = pygame.time.get_ticks()
+            # Horizontal auto-repeat
+            if h_key_down_time[pygame.K_LEFT] > 0 and current_ticks - h_key_down_time[pygame.K_LEFT] > h_move_delay_first:
+                if time_since_last_h_input >= h_move_interval_repeat:
+                    time_since_last_h_input = 0
+                    current_piece.x -= 1
+                    if not valid_space(current_piece, grid): current_piece.x += 1
+            
+            if h_key_down_time[pygame.K_RIGHT] > 0 and current_ticks - h_key_down_time[pygame.K_RIGHT] > h_move_delay_first:
+                if time_since_last_h_input >= h_move_interval_repeat:
+                    time_since_last_h_input = 0
+                    current_piece.x += 1
+                    if not valid_space(current_piece, grid): current_piece.x -= 1
+            
+            # Vertical soft drop auto-repeat
+            if keys_pressed_now[pygame.K_DOWN] and time_since_last_v_input >= v_move_interval:
+                time_since_last_v_input = 0
+                current_piece.y += 1
+                if not valid_space(current_piece, grid):
+                    current_piece.y -= 1
+                else:
+                    score += 1
+                    fall_time = 0
+
+        # --- Drawing ---
+        if not run_game and not game_over_displayed : break # If quit early
+
+        draw_window(win, grid, score, session_high_score, generation=None, population_size=None, genome_id=None)
+
+        if not game_over_displayed and current_piece : 
+            formatted_shape = convert_shape_format(current_piece)
+            for i in range(len(formatted_shape)):
+                x_coord, y_coord = formatted_shape[i]
+                if y_coord > -1: 
+                    pygame.draw.rect(win, current_piece.color, 
+                                     (TOP_LEFT_X + x_coord*BLOCK_SIZE, TOP_LEFT_Y + y_coord*BLOCK_SIZE, 
+                                      BLOCK_SIZE, BLOCK_SIZE), 0)
+            draw_next_shape(next_piece, win)
+        
+        # Level display for human player (can be added to draw_window or here)
+        level_label_text = f"Level: {level}"
+        level_surf = FONT_COMICSANS_20.render(level_label_text, 1, (255,255,255))
+        # Position it near other stats, e.g., under "Mode: Human Player" if that's drawn by draw_window
+        # Or, fixed position:
+        max_score_x = TOP_LEFT_X - 200 # Approximate position from draw_window
+        max_score_y = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50
+        human_mode_label_height = FONT_COMICSANS_20.get_height()
+        level_pos_y = max_score_y + FONT_COMICSANS_30.get_height() + 10 + human_mode_label_height + 5
+        win.blit(level_surf, (max_score_x, level_pos_y))
+
+
+        if paused:
+            pause_label = FONT_COMICSANS_60.render("PAUSED", 1, (255, 255, 0))
+            win.blit(pause_label, (TOP_LEFT_X + PLAY_WIDTH/2 - pause_label.get_width()/2,
+                                   TOP_LEFT_Y + PLAY_HEIGHT/3 - pause_label.get_height()/2)) # Higher up
+
+        if game_over_displayed:
+            # draw_text_middle alternative placement:
+            game_over_font = pygame.font.SysFont('comicsans', 80, bold=True)
+            game_over_label = game_over_font.render("GAME OVER", 1, (255,0,0))
+            sub_text_font = pygame.font.SysFont('comicsans', 30, bold=True)
+            sub_text_label = sub_text_font.render("Press any key to continue",1, (255,255,255))
+            
+            win.blit(game_over_label, (TOP_LEFT_X + PLAY_WIDTH/2 - game_over_label.get_width()/2,
+                                       TOP_LEFT_Y + PLAY_HEIGHT/3 - game_over_label.get_height()/2))
+            win.blit(sub_text_label, (TOP_LEFT_X + PLAY_WIDTH/2 - sub_text_label.get_width()/2,
+                                       TOP_LEFT_Y + PLAY_HEIGHT/3 + game_over_label.get_height()))
+
+
+        pygame.display.update()
+        clock.tick(60) 
+
+    # Save session high score
+    try:
+        with open("human_highscore.txt", "w") as f:
+            f.write(str(session_high_score))
+    except Exception as e:
+        print(f"Could not save high score: {e}")
+    
+    pygame.quit() # Quit Pygame when human play is done
 
 
 def display_main_menu(surface, save_file_path):
     button_width, button_height, button_spacing = 480, 70, 25
-    total_button_height = (button_height * 3) + (button_spacing * 2)
-    start_y = (S_HEIGHT - total_button_height) // 2 + 40
+    num_buttons = 4 # Now 4 buttons: train_draw, train_no_draw, play_saved, human_play
+    total_buttons_visual_height = (button_height * num_buttons) + (button_spacing * (num_buttons - 1))
+    start_y = (S_HEIGHT - total_buttons_visual_height) // 2 + 40 # Recalculate start_y to center the block
     button_x = (S_WIDTH - button_width) // 2
 
     buttons = {
         "train_draw": pygame.Rect(button_x, start_y, button_width, button_height),
-        "train_no_draw": pygame.Rect(button_x, start_y + button_height + button_spacing, button_width, button_height),
-        "play_saved": pygame.Rect(button_x, start_y + 2 * (button_height + button_spacing), button_width, button_height)
+        "train_no_draw": pygame.Rect(button_x, start_y + (button_height + button_spacing), button_width, button_height),
+        "play_saved": pygame.Rect(button_x, start_y + 2 * (button_height + button_spacing), button_width, button_height),
+        "human_play": pygame.Rect(button_x, start_y + 3 * (button_height + button_spacing), button_width, button_height) # New button
     }
     model_exists = os.path.exists(save_file_path)
     colors = {
@@ -746,17 +1060,17 @@ def display_main_menu(surface, save_file_path):
         surface.blit(shadow_surface, shadow_rect.topleft)
         pygame.draw.rect(surface, bg_color, rect, border_radius=12)
         pygame.draw.rect(surface, border_color, rect, 3 if is_hovered and is_enabled else 2, border_radius=12)
-        
+
         text_surface = FONT_ARIAL_28_BOLD.render(text, True, text_color)
         surface.blit(text_surface, (rect.centerx - text_surface.get_width()//2, rect.centery - text_surface.get_height()//2))
 
     while True:
-        for y_grad in range(S_HEIGHT): 
+        for y_grad in range(S_HEIGHT):
             ratio = y_grad / S_HEIGHT
             r,g,b = [int(c*(1-ratio*0.3) if i<2 else c+ratio*15) for i,c in enumerate(colors["background"])]
             pygame.draw.line(surface, (r,g,b), (0,y_grad), (S_WIDTH,y_grad))
 
-        surface.blit(FONT_ARIAL_64_BOLD.render('NEAT TETRIS AI', True, (0,0,0)), (S_WIDTH//2-title_label.get_width()//2+2, start_y-title_label.get_height()-80+2))
+        surface.blit(FONT_ARIAL_64_BOLD.render('NEAT TETRIS AI', True, (0,0,0)), (S_WIDTH//2-title_label.get_width()//2+2, start_y-title_label.get_height()-80+2)) # Title shadow
         surface.blit(title_label, (S_WIDTH//2-title_label.get_width()//2, start_y-title_label.get_height()-80))
         surface.blit(subtitle_label, (S_WIDTH//2-subtitle_label.get_width()//2, start_y-title_label.get_height()-80+title_label.get_height()+10))
 
@@ -764,16 +1078,22 @@ def display_main_menu(surface, save_file_path):
         button_texts = {
             "train_draw": "Train AI (with Visualization)",
             "train_no_draw": "Train AI (No Visualization - Faster)",
-            "play_saved": "Play with Saved AI"
+            "play_saved": "Play with Saved AI Model",
+            "human_play": "Play Tetris (Human Controlled)" # New button text
         }
         for name, rect in buttons.items():
-            is_enabled = True if name != "play_saved" else model_exists
-            draw_button(rect, button_texts[name], rect.collidepoint(mouse_pos), is_enabled)
-        
-        if not model_exists:
-            status_msg = FONT_ARIAL_18.render('(No saved AI model found)', True, colors["text_disabled"])
+            is_enabled = True
+            current_text_for_button = button_texts[name]
+            if name == "play_saved":
+                is_enabled = model_exists
+            # No need to change button text for disabled state, the visual style handles it.
+            draw_button(rect, current_text_for_button, rect.collidepoint(mouse_pos), is_enabled)
+
+        if not model_exists: # Display this message if the "Play with Saved AI" button is effectively disabled
+            status_msg = FONT_ARIAL_18.render('(No saved AI model found for "Play with Saved AI")', True, colors["text_disabled"])
+            # Position it near the relevant button or centrally
             surface.blit(status_msg, (buttons["play_saved"].centerx-status_msg.get_width()//2, buttons["play_saved"].bottom+12))
-        
+
         instr_surf = FONT_ARIAL_18.render("Press Q to quit | Click a button", True, colors["subtitle_color"])
         surface.blit(instr_surf, (S_WIDTH//2-instr_surf.get_width()//2, S_HEIGHT-40))
 
@@ -781,15 +1101,17 @@ def display_main_menu(surface, save_file_path):
             if event.type == pygame.QUIT: return "quit"
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 for name, rect in buttons.items():
-                    if rect.collidepoint(mouse_pos) and (name != "play_saved" or model_exists):
-                        return name
+                    if rect.collidepoint(mouse_pos):
+                        if name == "play_saved" and not model_exists:
+                            continue # Click on disabled button does nothing
+                        return name # Return action string
             if event.type == pygame.KEYDOWN and event.key == pygame.K_q: return "quit"
         pygame.display.update()
         clock.tick(60)
 
 
 if __name__ == '__main__':
-    local_dir = os.path.dirname(__file__) if __file__ else os.getcwd() # Handles running from IDE vs script
+    local_dir = os.path.dirname(__file__) if '__file__' in locals() else os.getcwd() # Handles running from IDE vs script
     config_path = os.path.join(local_dir, 'config-feedforward.txt')
     best_ai_path = os.path.join(local_dir, 'best_tetris_ai.pkl')
 
@@ -798,24 +1120,25 @@ if __name__ == '__main__':
         pygame.quit()
         exit()
 
-    pygame.init()
+    pygame.init() # Initialize Pygame once at the start
     win_menu = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
     pygame.display.set_caption("NEAT Tetris AI - Main Menu")
 
     action = display_main_menu(win_menu, best_ai_path)
-    
-    pygame.display.quit() # Close menu window before starting game/training
+
+    pygame.display.quit() # Close menu window before starting game/training (display module only)
+                         # Other Pygame modules (like font) remain initialized.
 
     if action == "train_draw":
         print("Starting training with game drawing...")
         run_neat(config_path, draw_while_training=True)
-        if os.path.exists(best_ai_path):
+        if os.path.exists(best_ai_path): # Check if a model was actually saved
             print("Training finished. Playing with the best AI from this session.")
             play_with_ai(best_ai_path, config_path)
     elif action == "train_no_draw":
         print("Starting training without game drawing (faster)...")
         run_neat(config_path, draw_while_training=False)
-        if os.path.exists(best_ai_path):
+        if os.path.exists(best_ai_path): # Check if a model was actually saved
             print("Training finished. Playing with the best AI from this session.")
             play_with_ai(best_ai_path, config_path)
     elif action == "play_saved":
@@ -823,10 +1146,13 @@ if __name__ == '__main__':
             print("Playing with saved AI...")
             play_with_ai(best_ai_path, config_path)
         else:
-            print("Saved AI model not found. Please train an AI first.")
+            print("Saved AI model not found. Please train an AI first.") # Should not happen if button was disabled
+    elif action == "human_play": # New action
+        print("Starting human player game...")
+        human_play_game()
     elif action == "quit":
         print("Exiting.")
 
-    pygame.quit()
+    pygame.quit() # Uninitialize all Pygame modules at the very end
     import sys
     sys.exit()
