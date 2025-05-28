@@ -224,8 +224,8 @@ def draw_next_shape(piece, surface):
     font = pygame.font.SysFont('comicsans', 30)
     label = font.render('Next Shape', 1, (255,255,255))
 
-    sx = TOP_LEFT_X + PLAY_WIDTH + 50
-    sy = TOP_LEFT_Y + PLAY_HEIGHT/2 - 100
+    sx = TOP_LEFT_X + PLAY_WIDTH + 30 # Consistent with score's sx
+    sy = TOP_LEFT_Y + PLAY_HEIGHT/2 - 150 # Adjusted Y to move it up
     shape_format = piece.shape[piece.rotation % len(piece.shape)]
 
     for i, line in enumerate(shape_format):
@@ -234,35 +234,49 @@ def draw_next_shape(piece, surface):
             if column == '0':
                 pygame.draw.rect(surface, piece.color, (sx + j*BLOCK_SIZE, sy + i*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
-    surface.blit(label, (sx + 10, sy - 30))
+    # Position label above the shape preview
+    surface.blit(label, (sx + (5*BLOCK_SIZE - label.get_width())/2, sy - label.get_height() - 5))
 
 
 def draw_window(surface, grid, score=0, last_score = 0, generation=0, population_size=0, genome_id=0):
     surface.fill((0,0,0)) # Black background
 
-    font = pygame.font.SysFont('comicsans', 60)
-    label = font.render('NEAT TETRIS', 1, (255,255,255))
-    surface.blit(label, (TOP_LEFT_X + PLAY_WIDTH / 2 - (label.get_width() / 2), 30))
+    # font = pygame.font.SysFont('comicsans', 60)
+    # label = font.render('NEAT TETRIS', 1, (255,255,255))
+    # # Lower the title to be above the grid
+    # surface.blit(label, (TOP_LEFT_X + PLAY_WIDTH / 2 - (label.get_width() / 2), TOP_LEFT_Y - label.get_height() - 10))
 
     # Current Score
     font = pygame.font.SysFont('comicsans', 30)
     label = font.render('Score: ' + str(score), 1, (255,255,255))
-    sx = TOP_LEFT_X + PLAY_WIDTH + 50
-    sy = TOP_LEFT_Y + PLAY_HEIGHT/2 - 100 + 150 # Adjust for next shape
-    surface.blit(label, (sx + 20, sy + 60))
+    # Adjusted sx for better positioning
+    sx = TOP_LEFT_X + PLAY_WIDTH + 30 # Moved slightly left
+    sy = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50 # Moved slightly down
+    surface.blit(label, (sx, sy + 150)) # Adjusted y for score
 
-    # Last Score
+    # Last Score (Max Score)
+    font = pygame.font.SysFont('comicsans', 30)
     label = font.render('Max Score: ' + str(last_score), 1, (255,255,255))
-    sx = TOP_LEFT_X - 200
-    sy = TOP_LEFT_Y + 200
-    surface.blit(label, (sx + 20, sy + 60))
+    # Adjusted x and y position to be to the left of the grid
+    max_score_x = TOP_LEFT_X - label.get_width() - 30 # Moved to the left of the grid
+    max_score_y = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50 # Aligned with score vertically
+    surface.blit(label, (max_score_x, max_score_y))
+
+    # Generation, Population, Genome ID display (Can be adjusted as needed)
+    font = pygame.font.SysFont('comicsans', 20)
+    gen_text = f"Gen: {generation}"
+    pop_text = f"Pop: {population_size}"
+    genome_text = f"Genome: {genome_id}"
     
-    # Generation and Genome Info
-    if generation > 0: # Only show if training
-        label_gen = font.render(f"Gen: {generation}", 1, (255,255,255))
-        surface.blit(label_gen, (10,10))
-        label_genome = font.render(f"Genome: {genome_id}/{population_size}", 1, (255,255,255))
-        surface.blit(label_genome, (10,50))
+    gen_label = font.render(gen_text, 1, (255,255,255))
+    pop_label = font.render(pop_text, 1, (255,255,255))
+    genome_label = font.render(genome_text, 1, (255,255,255))
+
+    # Position these texts as desired, for example, under the max score
+    text_start_y = max_score_y + label.get_height() + 10
+    surface.blit(gen_label, (max_score_x, text_start_y))
+    surface.blit(pop_label, (max_score_x, text_start_y + gen_label.get_height() + 5))
+    surface.blit(genome_label, (max_score_x, text_start_y + gen_label.get_height() + pop_label.get_height() + 10))
 
 
     for r in range(len(grid)):
