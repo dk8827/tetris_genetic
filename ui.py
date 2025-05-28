@@ -155,12 +155,40 @@ class NNVisualizer:
         # Identify hidden nodes by subtracting input and output keys from all nodes present in the genome
         hidden_keys_from_genome = all_node_ids_in_genome - set(input_keys) - set(output_keys)
 
+        # --- BEGIN DEBUG LOGS ---
+        print(f"--- NNVisualizer Debug ---")
+        print(f"Genome ID: {genome.key}")
+        print(f"All node IDs in genome: {sorted(list(all_node_ids_in_genome))}")
+        print(f"NEAT Config Input Keys: {sorted(input_keys)}")
+        print(f"NEAT Config Output Keys: {sorted(output_keys)}")
+        print(f"Calculated Hidden Keys: {sorted(list(hidden_keys_from_genome))}")
+        # --- END DEBUG LOGS ---
+
         layers_for_drawing = []
-        if input_keys: layers_for_drawing.append(sorted(list(set(input_keys).intersection(all_node_ids_in_genome))))
-        if hidden_keys_from_genome: layers_for_drawing.append(sorted(list(hidden_keys_from_genome)))
-        if output_keys: layers_for_drawing.append(sorted(list(set(output_keys).intersection(all_node_ids_in_genome))))
+        # Layer 1: Input nodes (always taken from config if they exist)
+        if input_keys:
+            layers_for_drawing.append(sorted(list(input_keys))) # Use all defined input_keys
+
+        # Layer 2: Hidden nodes (calculated as before)
+        if hidden_keys_from_genome:
+            # Ensure these hidden keys are actually in the genome's nodes (they should be by definition)
+            actual_hidden_nodes_in_genome = sorted(list(hidden_keys_from_genome.intersection(all_node_ids_in_genome)))
+            if actual_hidden_nodes_in_genome: # Add only if there are such hidden nodes
+                 layers_for_drawing.append(actual_hidden_nodes_in_genome)
+
+        # Layer 3: Output nodes (must be in genome.nodes)
+        if output_keys:
+            actual_output_nodes_in_genome = sorted(list(set(output_keys).intersection(all_node_ids_in_genome)))
+            if actual_output_nodes_in_genome: # Add only if there are such output nodes
+                layers_for_drawing.append(actual_output_nodes_in_genome)
         
-        layers_for_drawing = [l for l in layers_for_drawing if l] # Remove empty layers
+        layers_for_drawing = [l for l in layers_for_drawing if l] # Remove empty layers (e.g., if no hidden nodes)
+        
+        # --- BEGIN DEBUG LOGS ---
+        print(f"Layers for drawing (node_ids): {layers_for_drawing}")
+        print(f"Number of layers for drawing: {len(layers_for_drawing)}")
+        print(f"--- End NNVisualizer Debug ---")
+        # --- END DEBUG LOGS ---
 
         if not layers_for_drawing:
             no_layers_label = self.font_error.render('No layers for drawing', 1, COLOR_DARK_GREY)

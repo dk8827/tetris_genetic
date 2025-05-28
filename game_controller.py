@@ -8,7 +8,7 @@ from piece import Piece
 from renderer import Renderer
 from input_handler import InputHandler # For HumanGameController
 from ai_utils import AIPlayer # For AIGameController
-from config import (S_WIDTH, PLAY_HEIGHT, TOP_LEFT_X, PLAY_WIDTH, BLOCK_SIZE, TOP_LEFT_Y,INITIAL_FALL_SPEED, LEVEL_UP_LINES, FALL_SPEED_DECREMENT_PER_LEVEL, MIN_FALL_SPEED,
+from config import (S_WIDTH, S_HEIGHT, PLAY_HEIGHT, TOP_LEFT_X, PLAY_WIDTH, BLOCK_SIZE, TOP_LEFT_Y,INITIAL_FALL_SPEED, LEVEL_UP_LINES, FALL_SPEED_DECREMENT_PER_LEVEL, MIN_FALL_SPEED,
                     SOFT_DROP_SCORE, HARD_DROP_SCORE_MULTIPLIER, SCORE_MAP, HUMAN_HIGHSCORE_FILE,
                     AI_GAME_FRAME_LIMIT_BASE, AI_GAME_FRAME_LIMIT_PER_LINE)
 from game_state import GameState # Import GameState from the new file
@@ -238,7 +238,7 @@ class AIGameController(BaseGameController):
             self.max_score_so_far_session = _GLOBAL_MAX_SCORE_TRACKER
 
 
-    def render_game(self, nn_visualizer=None, best_genome_for_viz=None, neat_config_for_viz=None):
+    def render_game(self, nn_visualizer=None, genome_for_viz=None, neat_config_for_viz=None):
         if not self.draw_game: return
 
         visual_grid = self.board.create_visual_grid()
@@ -246,17 +246,31 @@ class AIGameController(BaseGameController):
         self.renderer.draw_play_area(visual_grid, self.current_piece if self.game_state != GameState.GAME_OVER else None)
         self.renderer.draw_next_shape(self.next_piece)
 
-        if nn_visualizer and best_genome_for_viz and neat_config_for_viz:
-             nn_area_x = TOP_LEFT_X + PLAY_WIDTH + 30 + 5*BLOCK_SIZE + 20 # From original
-             nn_area_y = TOP_LEFT_Y + 50
-             nn_area_width = S_WIDTH - nn_area_x - 20
-             nn_area_height = PLAY_HEIGHT - 200
-             if nn_area_width > 50 and nn_area_height > 50:
-                nn_visualizer.draw(best_genome_for_viz, neat_config_for_viz,
-                                   nn_area_x, nn_area_y, nn_area_width, nn_area_height)
+        if nn_visualizer and genome_for_viz and neat_config_for_viz:
+             nn_area_x = TOP_LEFT_X + PLAY_WIDTH + 30 + 5*BLOCK_SIZE + 20 
+             nn_area_y = TOP_LEFT_Y + 40 # Adjusted y to give space for title
+             
+             # Define dimensions for the NN visualizer box
+             # These could be constants or calculated based on S_WIDTH/S_HEIGHT
+             viz_width = S_WIDTH - nn_area_x - 20 # Use remaining width with some padding
+             viz_height = PLAY_HEIGHT - 60 # Use most of the play height, less some padding for game info
 
-        if self.game_state == GameState.GAME_OVER: # AI doesn't pause
-            self.renderer.draw_game_over_message() # Or some other indication for AI
+             # Ensure viz_width and viz_height are not too small
+             viz_width = max(viz_width, 200) # Minimum width
+             viz_height = max(viz_height, 200) # Minimum height
+             
+             # Check if these dimensions push it off screen, adjust if necessary
+             if nn_area_x + viz_width > S_WIDTH - 10: # 10 for safety margin
+                 viz_width = S_WIDTH - nn_area_x - 10
+             if nn_area_y + viz_height > S_HEIGHT - 10:
+                 viz_height = S_HEIGHT - nn_area_y - 10
+
+
+             nn_visualizer.draw(genome_for_viz, neat_config_for_viz, 
+                                nn_area_x, nn_area_y, viz_width, viz_height)
+
+        if self.game_state == GameState.GAME_OVER and not self.ai_stats_info: # Only for playback
+            self.renderer.draw_game_over_message() # Show Game Over during playback
         
         self.renderer.update_display()
 
@@ -292,30 +306,49 @@ class AIGameController(BaseGameController):
             self.genome_fitness += 0.1 # Example: config.AI_FITNESS_SURVIVAL_INCREMENT
         return False # Game continues
 
-    def run_for_evaluation(self, nn_visualizer=None, best_genome_for_viz=None, neat_config_for_viz=None):
-        """Runs the game for AI evaluation until game over or frame limit."""
+    def run_for_evaluation(self, nn_visualizer=None, current_genome_for_viz=None, best_genome_for_viz=None, neat_config_for_viz=None):
         self.game_state = GameState.PLAYING
-        
-        while self.game_state == GameState.PLAYING:
-            self.game_frames += 1
+        self.game_frames = 0
+        self.genome_fitness = 0 # Reset fitness for this evaluation
+        self.total_lines_cleared_genome = 0 # Reset lines for this evaluation
+        self.score = 0 # Reset score for this evaluation
 
-            if self.draw_game:
-                self.clock.tick() # Run as fast as possible if drawing, or set a sensible tick
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT: pygame.quit(); import sys; sys.exit()
-                    if event.type == pygame.KEYDOWN and event.key == pygame.K_q: pygame.quit(); import sys; sys.exit()
-            
-            if self.run_one_turn_ai(): # AI makes a move, returns True if game over
+        # Determine frame limit for this AI game
+        # Could be based on lines cleared, time, or a fixed number of pieces
+        # Example: base_limit + (lines_cleared * bonus_per_line)
+        # For now, use a simpler dynamic limit based on lines cleared, or a fixed large number if not specified.
+        frame_limit = AI_GAME_FRAME_LIMIT_BASE # Initial limit
+
+
+        while self.game_state == GameState.PLAYING:
+            if self.game_frames > frame_limit: # Timeout condition
+                self.genome_fitness -= 5 # Penalty for timeout
+                self.game_state = GameState.GAME_OVER # End game if it runs too long
+                break
+
+            if self.run_one_turn_ai(): # AI makes a move and checks for game over
                 break # Exit loop if game over
 
-            if self.draw_game:
-                self.render_game(nn_visualizer, best_genome_for_viz, neat_config_for_viz)
+            if self.draw_game and nn_visualizer:
+                # Decide which genome to visualize
+                genome_to_draw = best_genome_for_viz if best_genome_for_viz else current_genome_for_viz
+                self.render_game(nn_visualizer, genome_to_draw, neat_config_for_viz)
+                # Handle Pygame events if drawing, to keep window responsive & allow quit
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        os._exit(0) # Force exit if training window is closed
             
-            # Frame limit for AI training to prevent infinite games
-            if self.game_frames > AI_GAME_FRAME_LIMIT_BASE + (self.total_lines_cleared_genome * AI_GAME_FRAME_LIMIT_PER_LINE):
-                self.game_state = GameState.GAME_OVER # Consider this a timeout
-                break
-        
+            self.game_frames += 1
+            # Update frame_limit dynamically if desired, e.g., based on total_lines_cleared_genome
+            frame_limit = AI_GAME_FRAME_LIMIT_BASE + self.total_lines_cleared_genome * AI_GAME_FRAME_LIMIT_PER_LINE
+
+
+        # Final fitness calculation/adjustment after game over
+        # self.genome_fitness += self.score # Add score to fitness
+        self.genome_fitness += self.game_frames / 10 # Small reward for survival time
+        # Add penalty for not clearing lines if that's desired (e.g. if self.total_lines_cleared_genome == 0)
+
         return self.genome_fitness
 
 

@@ -69,7 +69,8 @@ class NeatTrainer:
             
             genome.fitness = game_sim.run_for_evaluation(
                 nn_visualizer=self.nn_visualizer_train if draw_while_training else None,
-                best_genome_for_viz=self.best_genome_overall if draw_while_training else None, # Show best overall in viz
+                current_genome_for_viz=genome if draw_while_training else None, # Pass current genome
+                best_genome_for_viz=self.best_genome_overall if draw_while_training else None, 
                 neat_config_for_viz=self.neat_config if draw_while_training else None
             )
 
