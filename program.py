@@ -10,7 +10,7 @@ pygame.font.init()
 pygame.mixer.init() # For sound effects (optional)
 
 # Screen dimensions
-S_WIDTH = 800
+S_WIDTH = 1200
 S_HEIGHT = 700
 PLAY_WIDTH = 300  # 300 // 10 = 30 width per block
 PLAY_HEIGHT = 600 # 600 // 20 = 30 height per block
@@ -820,12 +820,22 @@ def eval_genomes(genomes, config):
                 draw_next_shape(next_piece, win)
 
                 # Draw the best neural network found so far
-                nn_area_x = 20  # X position for NN visualization area
-                nn_area_y = TOP_LEFT_Y + 50 # Y position
-                nn_area_width = 180 # Width of NN vis area
-                nn_area_height = PLAY_HEIGHT - 200 # Height of NN vis area
+                # Calculate position for NN visualization area to the right of Next Shape
+                # TOP_LEFT_X, PLAY_WIDTH, S_WIDTH, BLOCK_SIZE, TOP_LEFT_Y, PLAY_HEIGHT are global/derived
+                next_shape_display_sx = TOP_LEFT_X + PLAY_WIDTH + 30 
+                next_shape_display_width = 5 * BLOCK_SIZE
+                padding_after_next_shape = 20
+                padding_right_edge = 20
+
+                nn_area_x = next_shape_display_sx + next_shape_display_width + padding_after_next_shape
+                nn_area_y = TOP_LEFT_Y + 50 # Y position (can be adjusted if needed)
+                nn_area_width = S_WIDTH - nn_area_x - padding_right_edge
+                nn_area_height = PLAY_HEIGHT - 200 # Height of NN vis area (can be adjusted)
+                
                 if BEST_GENOME_EVER_FOR_VIZ:
-                    draw_neural_network(win, BEST_GENOME_EVER_FOR_VIZ, config, nn_area_x, nn_area_y, nn_area_width, nn_area_height)
+                    # Ensure nn_area_width is positive before drawing
+                    if nn_area_width > 0:
+                         draw_neural_network(win, BEST_GENOME_EVER_FOR_VIZ, config, nn_area_x, nn_area_y, nn_area_width, nn_area_height)
 
                 # Draw current piece (already handled by grid if locked, need to draw falling)
                 temp_piece_draw = Piece(current_piece.x, current_piece.y, current_piece.shape)
