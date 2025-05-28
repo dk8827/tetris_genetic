@@ -199,10 +199,10 @@ def valid_space(piece, grid):
     return True
 
 
-def check_lost(positions):
+def check_lost(positions): # positions is locked_positions
     for pos in positions:
         _, y = pos
-        if y < 1: # If any locked piece is in the top visible row or above
+        if y < 1: # If any locked piece is in the top visible row (row 0) or above (y < 0)
             return True
     return False
 
@@ -229,30 +229,23 @@ def draw_grid_lines(surface, grid_rows): # Parameter renamed for clarity
 
 def clear_rows(grid, locked): # grid is passed but not directly used for modification logic, locked is key
     increment = 0
-    # Find full rows and mark them for clearing
     rows_to_clear = []
-    for i in range(len(grid)-1, -1, -1):
+    for i in range(len(grid)-1, -1, -1): # Iterate from bottom up
         row_is_full = True
         for j in range(len(grid[0])):
-            if grid[i][j] == (0,0,0): # Check the visual grid state
+            if grid[i][j] == (0,0,0): 
                 row_is_full = False
                 break
         if row_is_full:
             increment += 1
             rows_to_clear.append(i)
-            # Remove corresponding keys from locked_positions
             for j_col in range(len(grid[0])):
                 if (j_col, i) in locked:
                     del locked[(j_col, i)]
     
     if increment > 0:
-        # Shift down remaining locked positions
-        # Sort keys by y-value to process from bottom up (or top down carefully)
-        # Iterate over a copy of keys if modifying dict during iteration
-        # Affects rows ABOVE the cleared rows
-        
-        # Rebuild locked_positions essentially, or carefully shift
         new_locked = {}
+        # Sort keys by y-value to process correctly when shifting
         sorted_locked_keys = sorted(locked.keys(), key=lambda k: k[1], reverse=True) # y-descending
 
         for x_lock, y_lock in sorted_locked_keys:
@@ -272,21 +265,10 @@ def draw_next_shape(piece, surface): # piece is next_piece
     sx = TOP_LEFT_X + PLAY_WIDTH + 30
     sy = TOP_LEFT_Y + PLAY_HEIGHT/2 - 150
     
-    # Use precalculated relative coords for drawing centered
-    # We need to draw the piece as if its anchor is at (2,2) in a 5x5 preview box
-    # Piece's internal (x,y) are irrelevant for preview, only its shape and rotation
-    preview_piece_rel_coords = PRECALCULATED_SHAPES[piece.shape_idx][piece.rotation % piece.num_rotations]
-
-    # Find min/max extents to center it in a 5x5 block area
-    # The precalculated coords are already relative to an anchor that implies a 5x5 box.
-    # j-2, i-4. For a 5x5 preview, we want the anchor to be (2,2) of the 5x5 cells.
-    # So, draw at (sx + (coord_x+2)*BLOCK_SIZE, sy + (coord_y+2)*BLOCK_SIZE) if we assume coord_y was i-2
-    # The current offset (j-2, i-4) might make centering complex.
-    # Let's just draw using the raw shape definition for simplicity here.
     shape_format_strings = shapes[piece.shape_idx][piece.rotation % piece.num_rotations]
 
-    for i, line in enumerate(shape_format_strings): # line is string like '..0..'
-        for j, column_char in enumerate(line): # column_char is '.', '0'
+    for i, line in enumerate(shape_format_strings): 
+        for j, column_char in enumerate(line): 
             if column_char == '0':
                 pygame.draw.rect(surface, piece.color, 
                                  (sx + j*BLOCK_SIZE, sy + i*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
@@ -297,23 +279,16 @@ def draw_next_shape(piece, surface): # piece is next_piece
 def draw_window(surface, grid, score=0, last_score = 0, generation=0, population_size=0, genome_id=0):
     surface.fill((0,0,0))
 
-    # Title (Optional, can be uncommented if desired)
-    # title_label = FONT_COMICSANS_60.render('NEAT TETRIS', 1, (255,255,255))
-    # surface.blit(title_label, (TOP_LEFT_X + PLAY_WIDTH / 2 - (title_label.get_width() / 2), TOP_LEFT_Y - title_label.get_height() - 10))
-
-    # Current Score
     score_label = FONT_COMICSANS_30.render('Score: ' + str(score), 1, (255,255,255))
     sx_info = TOP_LEFT_X + PLAY_WIDTH + 30
-    sy_info_start = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50 # Adjusted base Y for info text
-    surface.blit(score_label, (sx_info, sy_info_start + 150)) # Score below Next Shape
+    sy_info_start = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50 
+    surface.blit(score_label, (sx_info, sy_info_start + 150)) 
 
-    # Max Score (Last Score)
     max_score_label = FONT_COMICSANS_30.render('Max Score: ' + str(last_score), 1, (255,255,255))
     max_score_x = TOP_LEFT_X - max_score_label.get_width() - 30
-    max_score_y = sy_info_start # Align with where score would be if on left
+    max_score_y = sy_info_start 
     surface.blit(max_score_label, (max_score_x, max_score_y))
 
-    # Generation, Population, Genome ID display
     gen_text = f"Gen: {generation}"
     pop_text = f"Pop: {population_size}"
     genome_text = f"Genome: {genome_id}"
@@ -327,24 +302,114 @@ def draw_window(surface, grid, score=0, last_score = 0, generation=0, population
     surface.blit(pop_label, (max_score_x, text_start_y + gen_label.get_height() + 5))
     surface.blit(genome_label, (max_score_x, text_start_y + gen_label.get_height() + pop_label.get_height() + 10))
 
-    # Draw game grid blocks
     for r in range(len(grid)):
         for c in range(len(grid[r])):
-            if grid[r][c] != (0,0,0): # Only draw actual blocks
+            if grid[r][c] != (0,0,0): 
                 pygame.draw.rect(surface, grid[r][c],
                                  (TOP_LEFT_X + c*BLOCK_SIZE, TOP_LEFT_Y + r*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
-    draw_grid_lines(surface, len(grid)) # Pass number of rows
+    draw_grid_lines(surface, len(grid)) 
     pygame.draw.rect(surface, (255,0,0), (TOP_LEFT_X, TOP_LEFT_Y, PLAY_WIDTH, PLAY_HEIGHT), 5) # Border
 
 
 # --- NEAT Specific Functions ---
-# get_board_features is not currently used by the eval_genomes AI decision logic.
-# It uses features derived from simulating a move directly.
-# def get_board_features(grid, current_piece): ...
 
-# simulate_move is also not directly used; logic is embedded.
-# def simulate_move(piece, grid, move_x, rotation_target): ...
+# --- AI Decision Function ---
+def determine_best_ai_move(current_piece_shape_idx, grid, locked_positions, net):
+    """
+    Determines the best move for the AI given the current piece, grid state, and neural network.
+
+    Args:
+        current_piece_shape_idx (int): The shape index of the piece to be placed.
+        grid (list of list of tuple): The current visual game grid.
+        locked_positions (dict): Dictionary of (x,y) -> color for already locked pieces.
+        net (neat.nn.FeedForwardNetwork): The neural network to evaluate moves.
+
+    Returns:
+        tuple or None: (final_x_anchor, final_rotation_idx, final_y_anchor) for the best move,
+                       or None if no valid (non-losing) move is found.
+    """
+    best_move_score = -float('inf')
+    best_move_details = None  # (final_x_anchor, final_rotation_idx, final_y_anchor)
+
+    sim_piece_template = Piece(0, 0, current_piece_shape_idx)
+
+    for r_idx in range(sim_piece_template.num_rotations):
+        sim_piece_template.rotation = r_idx
+        
+        current_rel_coords = sim_piece_template.get_relative_coords()
+        if not current_rel_coords: continue
+
+        min_dx = min(coord[0] for coord in current_rel_coords)
+        max_dx = max(coord[0] for coord in current_rel_coords)
+        
+        for c_anchor_x in range(-min_dx, 10 - max_dx):
+            sim_piece_template.x = c_anchor_x
+            sim_piece_template.y = 0 
+            
+            sim_piece_for_drop = Piece(sim_piece_template.x, sim_piece_template.y, sim_piece_template.shape_idx)
+            sim_piece_for_drop.rotation = sim_piece_template.rotation
+
+            while valid_space(sim_piece_for_drop, grid):
+                sim_piece_for_drop.y += 1
+            sim_piece_for_drop.y -= 1
+
+            formatted_dropped_piece = convert_shape_format(sim_piece_for_drop)
+            
+            hypothetical_locked_positions = locked_positions.copy()
+            for x_coord, y_coord in formatted_dropped_piece:
+                hypothetical_locked_positions[(x_coord, y_coord)] = sim_piece_for_drop.color 
+
+            if check_lost(hypothetical_locked_positions):
+                continue
+
+            temp_grid_with_piece = [row[:] for row in grid] 
+            for x_c, y_c in formatted_dropped_piece:
+                if 0 <= x_c < 10 and 0 <= y_c < 20: 
+                    temp_grid_with_piece[y_c][x_c] = sim_piece_for_drop.color
+            
+            heights_after = [0] * 10
+            for c in range(10):
+                for r_h in range(20):
+                    if temp_grid_with_piece[r_h][c] != (0,0,0):
+                        heights_after[c] = 20 - r_h
+                        break 
+            
+            agg_height_after = sum(heights_after)
+            
+            holes_after = 0
+            for c in range(10):
+                col_has_block = False
+                for r_h in range(20):
+                    if temp_grid_with_piece[r_h][c] != (0,0,0):
+                        col_has_block = True
+                    elif col_has_block and temp_grid_with_piece[r_h][c] == (0,0,0):
+                        holes_after += 1
+                                
+            bumpiness_after = 0
+            for i in range(9):
+                bumpiness_after += abs(heights_after[i] - heights_after[i+1])
+
+            lines_cleared_by_this_move = 0
+            for r_idx_clear in range(19, -1, -1):
+                if all(cell != (0,0,0) for cell in temp_grid_with_piece[r_idx_clear]):
+                    lines_cleared_by_this_move += 1
+            
+            move_inputs = (
+                agg_height_after / 200.0,
+                lines_cleared_by_this_move / 4.0,
+                holes_after / 200.0,
+                bumpiness_after / 180.0 
+            )
+            
+            output = net.activate(move_inputs)
+            current_move_score = output[0]
+
+            if current_move_score > best_move_score:
+                best_move_score = current_move_score
+                best_move_details = (sim_piece_for_drop.x, sim_piece_for_drop.rotation, sim_piece_for_drop.y)
+    
+    return best_move_details
 
 
 # --- Main Game Loop for NEAT ---
@@ -430,7 +495,7 @@ def draw_neural_network(surface, genome, config, x_start, y_start, width, height
                     color = (0, intensity, 0) if weight > 0 else (intensity, 0, 0)
                     thickness = int(max(1, min(abs(weight * line_thickness_multiplier), 3)))
                     try: pygame.draw.line(surface, color, pos_in, pos_out, thickness)
-                    except TypeError: pass
+                    except TypeError: pass # Should ideally log or handle if positions are not valid tuples
 
     for node_id, pos in node_positions.items():
         node_color, node_border_color = (180,180,180), (50,50,50) # Default for hidden
@@ -439,7 +504,7 @@ def draw_neural_network(surface, genome, config, x_start, y_start, width, height
         try:
             pygame.draw.circle(surface, node_color, (int(pos[0]), int(pos[1])), node_radius)
             pygame.draw.circle(surface, node_border_color, (int(pos[0]), int(pos[1])), node_radius, 1)
-        except TypeError: pass
+        except TypeError: pass # Should ideally log or handle if pos is not a valid tuple
 
 
 def eval_genomes(genomes, config, draw_while_training=True):
@@ -450,13 +515,13 @@ def eval_genomes(genomes, config, draw_while_training=True):
         win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
         pygame.display.set_caption(f"NEAT Tetris - Gen: {GENERATION_COUNT}")
 
-    for genome_id_tuple, genome in genomes: # genomes is list of (id, genome_obj) tuples
-        actual_genome_id = genome_id_tuple # Use this for display
+    for genome_id_tuple, genome in genomes: 
+        actual_genome_id = genome_id_tuple 
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         genome.fitness = 0
 
         locked_positions = {}
-        grid = create_grid(locked_positions) # Initial empty grid
+        grid = create_grid(locked_positions) 
         current_piece = get_shape()
         next_piece = get_shape()
         clock = pygame.time.Clock()
@@ -467,145 +532,44 @@ def eval_genomes(genomes, config, draw_while_training=True):
         run_genome = True
         while run_genome:
             game_frames += 1
-            # grid is updated based on locked_positions at start of frame or after piece locks
-            # For AI decision, current grid is source of truth
-            
-            clock.tick() # Needed for get_rawtime, no FPS cap when arg is missing
+            clock.tick() 
 
-            best_move_score = -float('inf')
-            best_move_details = None # (final_x_anchor, final_rotation_idx, final_y_anchor)
-
-            # --- AI: Simulate all possible moves ---
-            # Create a temporary Piece object for simulation to avoid altering current_piece state
-            sim_piece_template = Piece(0, 0, current_piece.shape_idx)
-
-            for r_idx in range(sim_piece_template.num_rotations):
-                sim_piece_template.rotation = r_idx
-                
-                current_rel_coords = sim_piece_template.get_relative_coords()
-                if not current_rel_coords: continue # Should not happen with valid shapes
-
-                min_dx = min(coord[0] for coord in current_rel_coords)
-                max_dx = max(coord[0] for coord in current_rel_coords)
-                
-                # Iterate through possible anchor column positions for sim_piece_template
-                for c_anchor_x in range(-min_dx, 10 - max_dx):
-                    sim_piece_template.x = c_anchor_x
-                    sim_piece_template.y = 0 # Start at top for drop simulation
-                    
-                    # Check initial validity (e.g. if top row already full where it would spawn)
-                    # This check is mostly for very high stacks.
-                    # If valid_space at y=0 fails, it means piece can't even exist at the top.
-                    # However, the drop loop itself will naturally handle this.
-                    # The primary check here is if the piece *can* be placed at this x,rotation.
-
-                    # Simulate hard drop for sim_piece_template
-                    # Create a copy of sim_piece_template for the drop simulation
-                    # to not affect sim_piece_template's y for next c_anchor_x
-                    sim_piece_for_drop = Piece(sim_piece_template.x, sim_piece_template.y, sim_piece_template.shape_idx)
-                    sim_piece_for_drop.rotation = sim_piece_template.rotation
-
-                    # Drop simulation
-                    while valid_space(sim_piece_for_drop, grid):
-                        sim_piece_for_drop.y += 1
-                    sim_piece_for_drop.y -= 1 # Back to last valid position
-
-                    # Create a temporary grid representing state *after* this move
-                    temp_grid_with_piece = [row[:] for row in grid] # Copy current game grid
-                    
-                    formatted_dropped_piece = convert_shape_format(sim_piece_for_drop)
-
-                    # Check if this simulated placement is a game-over scenario
-                    sim_is_lost = False
-                    for _, y_coord in formatted_dropped_piece:
-                        if y_coord < 0: # Piece "locked" above playable area
-                            sim_is_lost = True
-                            break
-                    if sim_is_lost:
-                        continue # This move leads to losing, skip evaluating it
-
-                    # "Place" piece on this temporary grid
-                    for x_c, y_c in formatted_dropped_piece:
-                        if 0 <= x_c < 10 and 0 <= y_c < 20: # Should be true due to valid_space & drop
-                            temp_grid_with_piece[y_c][x_c] = sim_piece_for_drop.color
-                        # else: error in logic or piece out of bounds despite valid_space
-
-                    # --- Calculate features of temp_grid_with_piece ---
-                    heights_after = [0] * 10
-                    for c in range(10):
-                        for r in range(20):
-                            if temp_grid_with_piece[r][c] != (0,0,0):
-                                heights_after[c] = 20 - r
-                                break
-                    
-                    agg_height_after = sum(heights_after)
-                    
-                    holes_after = 0
-                    for c in range(10):
-                        col_has_block = False
-                        for r in range(20):
-                            if temp_grid_with_piece[r][c] != (0,0,0):
-                                col_has_block = True
-                            elif col_has_block and temp_grid_with_piece[r][c] == (0,0,0):
-                                holes_after += 1
-                                
-                    bumpiness_after = 0
-                    for i in range(9):
-                        bumpiness_after += abs(heights_after[i] - heights_after[i+1])
-
-                    lines_cleared_by_this_move = 0
-                    for r_idx_clear in range(19, -1, -1):
-                        if all(cell != (0,0,0) for cell in temp_grid_with_piece[r_idx_clear]):
-                            lines_cleared_by_this_move += 1
-                    
-                    move_inputs = (
-                        agg_height_after / 200.0, # Normalize
-                        lines_cleared_by_this_move / 4.0, # Normalize
-                        holes_after / 200.0, # Normalize
-                        bumpiness_after / 90.0 # Normalize (max bumpiness for col height diff of 10 * 9 cols)
-                    )
-                    
-                    output = net.activate(move_inputs)
-                    current_move_score = output[0]
-
-                    if current_move_score > best_move_score:
-                        best_move_score = current_move_score
-                        best_move_details = (sim_piece_for_drop.x, sim_piece_for_drop.rotation, sim_piece_for_drop.y)
+            # --- AI: Determine best move ---
+            best_move_details = determine_best_ai_move(
+                current_piece.shape_idx, grid, locked_positions, net
+            )
             
             # --- Execute the best move ---
             if best_move_details:
                 current_piece.x, current_piece.rotation, current_piece.y = best_move_details
                 
-                # Lock piece: update locked_positions
                 shape_pos_to_lock = convert_shape_format(current_piece)
                 for p_x, p_y in shape_pos_to_lock:
-                    if 0 <= p_x < 10 and 0 <= p_y < 20:
-                         locked_positions[(p_x, p_y)] = current_piece.color
-                    # else: part of piece might be out of bounds, should be handled by check_lost if y<1
+                    # Allow locking pieces partially or fully above the visible grid
+                    # check_lost will handle if this results in a game over
+                    locked_positions[(p_x, p_y)] = current_piece.color
 
-                # Update grid from new locked_positions for next frame/clear_rows
                 grid = create_grid(locked_positions)
 
-                cleared_rows_count = clear_rows(grid, locked_positions) # Modifies locked_positions, updates grid
+                cleared_rows_count = clear_rows(grid, locked_positions) 
                 if cleared_rows_count > 0:
-                    grid = create_grid(locked_positions) # Re-create grid after rows cleared and shifted
+                    grid = create_grid(locked_positions) 
 
                 total_lines_cleared_genome += cleared_rows_count
                 
                 score_map = {1: 40, 2: 100, 3: 300, 4: 1200}
                 score += score_map.get(cleared_rows_count, 0)
                 
-                genome.fitness += cleared_rows_count * 10  # Reward for clearing lines
-                if cleared_rows_count == 4: genome.fitness += 5 # Extra for Tetris
-                genome.fitness += 0.1 # Small reward for placing a piece / surviving
+                genome.fitness += cleared_rows_count * 10  
+                if cleared_rows_count == 4: genome.fitness += 5 
+                genome.fitness += 0.1 
 
                 current_piece = next_piece
                 next_piece = get_shape()
 
                 if score > MAX_SCORE_SO_FAR: MAX_SCORE_SO_FAR = score
             else:
-                # No valid move found by AI, game ends for this genome
-                genome.fitness -= 10 # Penalize if stuck
+                genome.fitness -= 10 
                 run_genome = False
                 continue
 
@@ -615,7 +579,7 @@ def eval_genomes(genomes, config, draw_while_training=True):
                     for r_row in range(20):
                         if grid[r_row][c_col] != (0,0,0):
                             heights_final[c_col] = 20 - r_row; break
-                genome.fitness -= sum(heights_final) * 0.05 # Smaller penalty for final height
+                genome.fitness -= sum(heights_final) * 0.05 
                 run_genome = False
 
             if genome.fitness is not None and genome.fitness > HIGHEST_FITNESS_EVER_FOR_VIZ:
@@ -626,13 +590,7 @@ def eval_genomes(genomes, config, draw_while_training=True):
                 draw_window(win, grid, score, MAX_SCORE_SO_FAR, GENERATION_COUNT, len(genomes), actual_genome_id)
                 draw_next_shape(next_piece, win)
                 
-                # Draw current piece being controlled by AI (it's already "locked" effectively by AI choice)
-                # We can draw it from current_piece state before it's swapped to next_piece
-                # However, the current drawing logic draws based on grid, so locked piece is shown
-                # If we want to show falling piece, it would need separate drawing before locking
-                
-                # Draw NN of the best genome found so far
-                nn_area_x = TOP_LEFT_X + PLAY_WIDTH + 30 + 5*BLOCK_SIZE + 20 # Right of next shape
+                nn_area_x = TOP_LEFT_X + PLAY_WIDTH + 30 + 5*BLOCK_SIZE + 20 
                 nn_area_y = TOP_LEFT_Y + 50
                 nn_area_width = S_WIDTH - nn_area_x - 20
                 nn_area_height = PLAY_HEIGHT - 200
@@ -642,10 +600,10 @@ def eval_genomes(genomes, config, draw_while_training=True):
                 pygame.display.update()
 
             for event in pygame.event.get():
-                if event.type == pygame.QUIT: pygame.quit(); quit()
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_q: pygame.quit(); quit()
+                if event.type == pygame.QUIT: pygame.quit(); import sys; sys.exit()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_q: pygame.quit(); import sys; sys.exit()
 
-            if game_frames > 1500 + (total_lines_cleared_genome * 100): # Timeout adjusted
+            if game_frames > 1500 + (total_lines_cleared_genome * 100): 
                 run_genome = False
 
 
@@ -657,9 +615,9 @@ def run_neat(config_path, draw_while_training=True):
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
-    # p.add_reporter(neat.Checkpointer(5))
+    # p.add_reporter(neat.Checkpointer(5)) # Optional: uncomment to save checkpoints
 
-    winner = p.run(lambda genomes, config_obj: eval_genomes(genomes, config_obj, draw_while_training), 50)
+    winner = p.run(lambda genomes, config_obj: eval_genomes(genomes, config_obj, draw_while_training), 50) # Train for 50 generations
 
     with open('best_tetris_ai.pkl', 'wb') as output:
         pickle.dump((winner, config), output, 1)
@@ -673,7 +631,7 @@ def play_with_ai(genome_path, config_path=None):
             data = pickle.load(f)
             if isinstance(data, tuple) and len(data) == 2 and isinstance(data[1], neat.Config):
                 genome, loaded_config = data
-            else: genome = data # Old format
+            else: genome = data 
     except FileNotFoundError:
         print(f"Error: Genome file not found at {genome_path}")
         return
@@ -693,7 +651,7 @@ def play_with_ai(genome_path, config_path=None):
         print("Error: AI config not found with genome and no fallback config_path provided.")
         return
     
-    config = loaded_config # Use this config
+    config = loaded_config 
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
     pygame.display.set_caption("Tetris - AI Playing")
@@ -709,79 +667,24 @@ def play_with_ai(genome_path, config_path=None):
     print("Playing with the best AI. Press Q to quit.")
 
     while run_ai_play:
-        grid = create_grid(locked_positions) # Update grid for display
-        clock.tick(10) # Play at a visible speed (e.g., 10 FPS)
+        grid = create_grid(locked_positions) 
+        clock.tick(10) 
 
-        # --- AI Decision Making (mirrors eval_genomes optimized logic) ---
-        best_move_score = -float('inf')
-        best_move_details = None
-
-        sim_piece_template = Piece(0, 0, current_piece.shape_idx)
-        for r_idx in range(sim_piece_template.num_rotations):
-            sim_piece_template.rotation = r_idx
-            current_rel_coords = sim_piece_template.get_relative_coords()
-            if not current_rel_coords: continue
-            min_dx = min(coord[0] for coord in current_rel_coords)
-            max_dx = max(coord[0] for coord in current_rel_coords)
-
-            for c_anchor_x in range(-min_dx, 10 - max_dx):
-                sim_piece_template.x = c_anchor_x
-                sim_piece_template.y = 0
-                
-                sim_piece_for_drop = Piece(sim_piece_template.x, sim_piece_template.y, sim_piece_template.shape_idx)
-                sim_piece_for_drop.rotation = sim_piece_template.rotation
-
-                while valid_space(sim_piece_for_drop, grid):
-                    sim_piece_for_drop.y += 1
-                sim_piece_for_drop.y -= 1
-
-                temp_grid_with_piece = [row[:] for row in grid]
-                formatted_dropped_piece = convert_shape_format(sim_piece_for_drop)
-                
-                sim_is_lost = any(y_coord < 0 for _, y_coord in formatted_dropped_piece)
-                if sim_is_lost: continue
-
-                for x_c, y_c in formatted_dropped_piece:
-                    if 0 <= x_c < 10 and 0 <= y_c < 20:
-                        temp_grid_with_piece[y_c][x_c] = sim_piece_for_drop.color
-                
-                heights_after = [0]*10; holes_after=0; bumpiness_after=0; lines_cleared_by_this_move=0
-                for c in range(10):
-                    for r_h in range(20):
-                        if temp_grid_with_piece[r_h][c]!=(0,0,0): heights_after[c]=20-r_h; break
-                agg_height_after = sum(heights_after)
-                for c in range(10):
-                    col_has_block=False
-                    for r_h in range(20):
-                        if temp_grid_with_piece[r_h][c]!=(0,0,0): col_has_block=True
-                        elif col_has_block and temp_grid_with_piece[r_h][c]==(0,0,0): holes_after+=1
-                for i in range(9): bumpiness_after+=abs(heights_after[i]-heights_after[i+1])
-                for r_idx_clear in range(19,-1,-1):
-                    if all(cell!=(0,0,0) for cell in temp_grid_with_piece[r_idx_clear]):
-                        lines_cleared_by_this_move+=1
-                
-                move_inputs = (
-                    agg_height_after / 200.0, lines_cleared_by_this_move / 4.0,
-                    holes_after / 200.0, bumpiness_after / 90.0
-                )
-                output = net.activate(move_inputs)
-                current_move_score = output[0]
-
-                if current_move_score > best_move_score:
-                    best_move_score = current_move_score
-                    best_move_details = (sim_piece_for_drop.x, sim_piece_for_drop.rotation, sim_piece_for_drop.y)
+        # --- AI Decision Making ---
+        best_move_details = determine_best_ai_move(
+            current_piece.shape_idx, grid, locked_positions, net
+        )
         
         if best_move_details:
             current_piece.x, current_piece.rotation, current_piece.y = best_move_details
             shape_pos_to_lock = convert_shape_format(current_piece)
             for p_x, p_y in shape_pos_to_lock:
-                if 0 <= p_x < 10 and 0 <= p_y < 20:
-                    locked_positions[(p_x, p_y)] = current_piece.color
+                locked_positions[(p_x, p_y)] = current_piece.color # Allow locking above grid
             
-            grid = create_grid(locked_positions) # Update grid for clear_rows and display
+            grid = create_grid(locked_positions) 
             cleared_rows_count = clear_rows(grid, locked_positions)
             if cleared_rows_count > 0:
-                grid = create_grid(locked_positions) # Re-create grid if rows were cleared
+                grid = create_grid(locked_positions)
 
             score_map = {1: 40, 2: 100, 3: 300, 4: 1200}
             score += score_map.get(cleared_rows_count, 0)
@@ -796,15 +699,11 @@ def play_with_ai(genome_path, config_path=None):
             print(f"Game Over! Final Score: {score}")
             run_ai_play = False
 
-        # --- Drawing ---
-        draw_window(win, grid, score, MAX_SCORE_SO_FAR) # MAX_SCORE_SO_FAR might not be relevant here or could be high score from training
+        draw_window(win, grid, score, MAX_SCORE_SO_FAR) 
         draw_next_shape(next_piece, win)
-        
-        # Draw current piece (it's essentially placed by AI, so this is more like ghost)
-        # If needed, draw actual current piece at its chosen position.
-        # The grid drawing already covers locked pieces.
-        # To show the "falling" piece, it would be current_piece before locking logic.
-        # Since AI does hard drop, it's immediately locked.
+        # Optionally, draw the AI's chosen piece placement briefly before it locks
+        # (current_piece before it's swapped to next_piece)
+        # For now, the hard drop means it locks instantly and is drawn as part of the grid.
         pygame.display.update()
 
         for event in pygame.event.get():
@@ -852,7 +751,7 @@ def display_main_menu(surface, save_file_path):
         surface.blit(text_surface, (rect.centerx - text_surface.get_width()//2, rect.centery - text_surface.get_height()//2))
 
     while True:
-        for y_grad in range(S_HEIGHT): # Gradient background
+        for y_grad in range(S_HEIGHT): 
             ratio = y_grad / S_HEIGHT
             r,g,b = [int(c*(1-ratio*0.3) if i<2 else c+ratio*15) for i,c in enumerate(colors["background"])]
             pygame.draw.line(surface, (r,g,b), (0,y_grad), (S_WIDTH,y_grad))
@@ -890,16 +789,15 @@ def display_main_menu(surface, save_file_path):
 
 
 if __name__ == '__main__':
-    local_dir = os.path.dirname(__file__) if __file__ else os.getcwd()
+    local_dir = os.path.dirname(__file__) if __file__ else os.getcwd() # Handles running from IDE vs script
     config_path = os.path.join(local_dir, 'config-feedforward.txt')
     best_ai_path = os.path.join(local_dir, 'best_tetris_ai.pkl')
 
-    # Ensure config file exists
     if not os.path.exists(config_path):
         print(f"Error: NEAT configuration file '{config_path}' not found.")
-        print("Please create a 'config-feedforward.txt' file in the same directory.")
+        print("Please create a 'config-feedforward.txt' file in the same directory as the script.")
         print("A sample config requires num_inputs = 4 for the current AI.")
-        # Example minimal config content:
+        # Example:
         # [NEAT]
         # fitness_criterion     = max
         # fitness_threshold     = 100000 
@@ -907,8 +805,45 @@ if __name__ == '__main__':
         # reset_on_extinction   = False
         # [DefaultGenome]
         # num_inputs              = 4
+        # num_hidden              = 0 
         # num_outputs             = 1
-        # ... (other params or defaults will be used by NEAT)
+        # initial_connection      = full_direct
+        # feed_forward            = True
+        # activation_default      = tanh
+        # activation_mutate_rate  = 0.0
+        # activation_options      = tanh
+        # aggregation_default     = sum
+        # aggregation_mutate_rate = 0.0
+        # aggregation_options     = sum
+        # bias_init_mean          = 0.0
+        # bias_init_stdev         = 1.0
+        # bias_max_value          = 30.0
+        # bias_min_value          = -30.0
+        # bias_mutate_power       = 0.5
+        # bias_mutate_rate        = 0.7
+        # bias_replace_rate       = 0.1
+        # compatibility_disjoint_coefficient = 1.0
+        # compatibility_weight_coefficient = 0.5
+        # conn_add_prob           = 0.5
+        # conn_delete_prob        = 0.5
+        # enabled_default         = True
+        # enabled_mutate_rate     = 0.01
+        # node_add_prob           = 0.2
+        # node_delete_prob        = 0.2
+        # response_init_mean      = 1.0
+        # response_init_stdev     = 0.0
+        # response_max_value      = 30.0
+        # response_min_value      = -30.0
+        # response_mutate_power   = 0.0
+        # response_mutate_rate    = 0.0
+        # response_replace_rate   = 0.0
+        # weight_init_mean        = 0.0
+        # weight_init_stdev       = 1.0
+        # weight_max_value        = 30
+        # weight_min_value        = -30
+        # weight_mutate_power     = 0.5
+        # weight_mutate_rate      = 0.8
+        # weight_replace_rate     = 0.1
         pygame.quit()
         exit()
 
@@ -918,27 +853,25 @@ if __name__ == '__main__':
 
     action = display_main_menu(win_menu, best_ai_path)
     
-    # Pygame window might be closed by display_main_menu's quit, or by subsequent functions.
-    # So, subsequent functions (run_neat, play_with_ai) re-initialize display if needed or manage their own.
+    pygame.display.quit() # Close menu window before starting game/training
 
     if action == "train_draw":
         print("Starting training with game drawing...")
         run_neat(config_path, draw_while_training=True)
-        # After training, optionally play with the best AI if it was saved
         if os.path.exists(best_ai_path):
-            print("Training finished. Playing with the best AI.")
+            print("Training finished. Playing with the best AI from this session.")
             play_with_ai(best_ai_path, config_path)
     elif action == "train_no_draw":
         print("Starting training without game drawing (faster)...")
         run_neat(config_path, draw_while_training=False)
         if os.path.exists(best_ai_path):
-            print("Training finished. Playing with the best AI.")
+            print("Training finished. Playing with the best AI from this session.")
             play_with_ai(best_ai_path, config_path)
     elif action == "play_saved":
         if os.path.exists(best_ai_path):
             print("Playing with saved AI...")
             play_with_ai(best_ai_path, config_path)
-        else: # Should be caught by menu, but as a fallback
+        else:
             print("Saved AI model not found. Please train an AI first.")
     elif action == "quit":
         print("Exiting.")
