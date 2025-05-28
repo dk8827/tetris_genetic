@@ -776,7 +776,7 @@ def human_play_game():
     lines_cleared_total = 0
 
     fall_time = 0
-    initial_fall_speed = 0.40 # Seconds per drop initially
+    initial_fall_speed = 0.30 # Seconds per drop initially (Adjusted from 0.40)
     fall_speed = initial_fall_speed
     
     # DAS (Delayed Auto Shift) and ARR (Auto Repeat Rate) for horizontal movement
@@ -787,7 +787,7 @@ def human_play_game():
 
     # Soft drop speed
     time_since_last_v_input = 0
-    v_move_interval = 40 # ms for soft drop repeats
+    v_move_interval = 16 # ms for soft drop repeats (Adjusted from 40ms for faster soft drop)
 
     run_game = True
     paused = False
