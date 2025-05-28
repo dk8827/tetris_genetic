@@ -1,6 +1,7 @@
 import pygame
 import random
 import neat
+import neat.graphs # Added for NN visualization
 import os
 import pickle # To save and load the best genome
 
@@ -126,6 +127,10 @@ T = [['.....',
 
 shapes = [S, Z, I, O, J, L, T]
 shape_colors = [(0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 255, 0), (255, 165, 0), (0, 0, 255), (128, 0, 128)]
+
+# Global variables for tracking the best genome for visualization
+BEST_GENOME_EVER_FOR_VIZ = None
+HIGHEST_FITNESS_EVER_FOR_VIZ = -float('inf')
 
 # --- Piece Class ---
 class Piece:
@@ -437,8 +442,167 @@ def simulate_move(piece, grid, move_x, rotation_target):
 MAX_SCORE_SO_FAR = 0
 GENERATION_COUNT = 0
 
+# --- Function to Draw Neural Network ---
+def draw_neural_network(surface, genome, config, x_start, y_start, width, height):
+    """
+    Draws a representation of the neural network.
+    """
+    # ADDED FOR DEBUGGING
+    # print("--- Drawing NN Debug Info ---")
+    if not genome or not config:
+        # print("Genome or Config is None. Exiting draw_neural_network.")
+        # Fallback to draw an error message if no genome/config
+        font = pygame.font.SysFont('comicsans', 16)
+        error_label = font.render('No genome data', 1, (150,150,150))
+        pygame.draw.rect(surface, (30, 30, 30), (x_start, y_start, width, height)) # Background
+        surface.blit(error_label, (x_start + (width - error_label.get_width())/2, y_start + (height - error_label.get_height())/2))
+        return
+    # else:
+    #     dbg_input_keys_print = list(config.genome_config.input_keys) # Renamed for clarity
+    #     dbg_output_keys_print = list(config.genome_config.output_keys) # Renamed for clarity
+    #     dbg_genome_node_keys_print = list(genome.nodes.keys()) if genome and hasattr(genome, 'nodes') else 'N/A'
+    #     dbg_connections_print = [(cg.key, cg.weight, cg.enabled) for cg_key, cg in genome.connections.items()] if genome and hasattr(genome, 'connections') else 'N/A'
+        
+    #     print(f"  Config Input Keys: {dbg_input_keys_print}")
+    #     print(f"  Config Output Keys: {dbg_output_keys_print}")
+    #     print(f"  Genome Node Keys: {dbg_genome_node_keys_print}")
+    #     print(f"  Number of enabled connections in genome: {len([c for c in dbg_connections_print if c[2]]) if isinstance(dbg_connections_print, list) else 'N/A'}")
+
+    node_radius = 7
+    node_spacing_y_within_layer = 12
+    line_thickness_multiplier = 2.5
+    padding = 15
+
+    pygame.draw.rect(surface, (30, 30, 30), (x_start, y_start, width, height))
+    pygame.draw.rect(surface, (80, 80, 80), (x_start, y_start, width, height), 2)
+
+    font = pygame.font.SysFont('comicsans', 16)
+    title_label = font.render('Best Genome NN', 1, (220,220,220))
+    title_x = x_start + (width - title_label.get_width()) / 2
+    title_y = y_start + padding / 3
+    surface.blit(title_label, (title_x, title_y))
+
+    content_y_start = title_y + title_label.get_height() + padding / 2
+    content_x_start = x_start + padding
+    content_width = width - 2 * padding
+    content_height = height - (content_y_start - y_start) - padding
+
+    # Use actual input/output keys from config for drawing
+    input_keys = list(config.genome_config.input_keys)
+    output_keys = list(config.genome_config.output_keys)
+    
+    # Get actual node genes from the genome, if they exist (for hidden nodes mainly)
+    # Input nodes might not be in genome.nodes if they are default.
+    genome_nodes_present = genome.nodes if hasattr(genome, 'nodes') else {}
+
+    node_positions = {}
+
+    # Simplified Layering:
+    # Layer 0: Input nodes
+    # Layer 1: Hidden nodes (if any, from genome.nodes that are not I/O)
+    # Layer 2: Output nodes
+    
+    # print(f"  Using simplified layering. Input keys: {input_keys}, Output keys: {output_keys}")
+
+    potential_hidden_nodes = set(genome_nodes_present.keys()) - set(input_keys) - set(output_keys)
+    
+    layers_for_drawing = [set(input_keys)]
+    if potential_hidden_nodes:
+        layers_for_drawing.append(potential_hidden_nodes)
+    layers_for_drawing.append(set(output_keys))
+    
+    layers_for_drawing = [l for l in layers_for_drawing if l] # Filter out empty layers (e.g. no hidden nodes)
+
+    # print(f"  Simplified Layers (after filtering empty): {layers_for_drawing}")
+
+
+    if not layers_for_drawing:
+        no_layers_label = font.render('No layers for drawing', 1, (150,150,150))
+        surface.blit(no_layers_label, (x_start + (width - no_layers_label.get_width())/2, y_start + (height - no_layers_label.get_height())/2))
+        return
+
+    num_layers = len(layers_for_drawing)
+    if num_layers == 0: return
+
+    layer_x_positions = []
+    if num_layers == 1:
+        layer_x_positions.append(content_x_start + content_width / 2)
+    else:
+        spacing = (content_width - 2 * node_radius) / (num_layers - 1) if num_layers > 1 else 0
+        for i in range(num_layers):
+            layer_x_positions.append(content_x_start + node_radius + i * spacing)
+
+    for i, layer_nodes_set in enumerate(layers_for_drawing):
+        layer_nodes = sorted(list(layer_nodes_set)) # Sort for consistent drawing order
+        if not layer_nodes: continue
+
+        num_nodes_in_layer = len(layer_nodes)
+        current_layer_x = layer_x_positions[i]
+        
+        # Dynamic vertical spacing based on available height and number of nodes
+        total_node_height = num_nodes_in_layer * (2 * node_radius)
+        if num_nodes_in_layer > 1:
+            effective_spacing_y = (content_height - total_node_height) / (num_nodes_in_layer -1)
+            effective_spacing_y = max(effective_spacing_y, node_spacing_y_within_layer / 2) # Min spacing
+            effective_spacing_y = min(effective_spacing_y, node_spacing_y_within_layer * 1.5) # Max cap to prevent too much spread
+        else:
+            effective_spacing_y = 0
+
+        start_y_for_layer = (content_height - (total_node_height + max(0, num_nodes_in_layer - 1) * effective_spacing_y)) / 2
+        start_y_for_layer = max(start_y_for_layer, 0) # Ensure it's not negative
+
+        for node_idx, node_id in enumerate(layer_nodes):
+            y_pos = content_y_start + start_y_for_layer + node_idx * (2 * node_radius + effective_spacing_y) + node_radius
+            node_positions[node_id] = (current_layer_x, y_pos)
+
+    # Draw Connections
+    if hasattr(genome, 'connections'):
+        for cg_key, cg_gene in genome.connections.items(): # cg_gene is ConnectionGene object
+            if cg_gene.enabled:
+                input_node_id, output_node_id = cg_gene.key
+                pos_in = node_positions.get(input_node_id)
+                pos_out = node_positions.get(output_node_id)
+
+                if pos_in and pos_out:
+                    weight = cg_gene.weight
+                    if weight > 0:
+                        intensity = int(min(255, max(30, 50 + weight * 150)))
+                        color = (0, intensity, 0)
+                    else:
+                        intensity = int(min(255, max(30, 50 + abs(weight) * 150)))
+                        color = (intensity, 0, 0)
+                    
+                    thickness = int(max(1, min(abs(weight * line_thickness_multiplier), 3)))
+                    try:
+                        pygame.draw.line(surface, color, pos_in, pos_out, thickness)
+                    except TypeError:
+                        pass # Should be rare if pos_in/pos_out are good
+
+    # Draw Nodes
+    # print(f"  Node positions calculated for keys: {list(node_positions.keys())}")
+    # print("--- End NN Debug Info ---") # If re-enabling debug
+
+    for node_id, pos in node_positions.items():
+        node_color = (180, 180, 180) 
+        node_border_color = (50,50,50)
+        if node_id in input_keys: # Use the definitive input_keys from config
+            node_color = (80, 80, 220) 
+            node_border_color = (120,120,255)
+        elif node_id in output_keys: # Use the definitive output_keys from config
+            node_color = (80, 220, 80)
+            node_border_color = (120,255,120)
+        # Hidden nodes would be default (180,180,180)
+
+        try:
+            pygame.draw.circle(surface, node_color, (int(pos[0]), int(pos[1])), node_radius)
+            pygame.draw.circle(surface, node_border_color, (int(pos[0]), int(pos[1])), node_radius, 1)
+        except TypeError: 
+            pass
+
+
+
 def eval_genomes(genomes, config):
-    global MAX_SCORE_SO_FAR, GENERATION_COUNT
+    global MAX_SCORE_SO_FAR, GENERATION_COUNT, BEST_GENOME_EVER_FOR_VIZ, HIGHEST_FITNESS_EVER_FOR_VIZ
     GENERATION_COUNT += 1
     win = pygame.display.set_mode((S_WIDTH, S_HEIGHT)) # Initialize once per generation if needed
 
@@ -641,6 +805,11 @@ def eval_genomes(genomes, config):
                 run = False
                 # print(f"Genome {genome_id} lost. Score: {score}, Lines: {total_lines_cleared_genome}, Fitness: {genome.fitness:.2f}")
 
+            # Update BEST_GENOME_EVER_FOR_VIZ and HIGHEST_FITNESS_EVER_FOR_VIZ
+            if genome.fitness is not None and genome.fitness > HIGHEST_FITNESS_EVER_FOR_VIZ:
+                HIGHEST_FITNESS_EVER_FOR_VIZ = genome.fitness
+                BEST_GENOME_EVER_FOR_VIZ = genome
+
 
             # --- Drawing ---
             # Only draw if you want to watch it train (slows down significantly)
@@ -649,6 +818,15 @@ def eval_genomes(genomes, config):
             if True: # Draw all
                 draw_window(win, grid, score, MAX_SCORE_SO_FAR, GENERATION_COUNT, len(genomes), genome_id)
                 draw_next_shape(next_piece, win)
+
+                # Draw the best neural network found so far
+                nn_area_x = 20  # X position for NN visualization area
+                nn_area_y = TOP_LEFT_Y + 50 # Y position
+                nn_area_width = 180 # Width of NN vis area
+                nn_area_height = PLAY_HEIGHT - 200 # Height of NN vis area
+                if BEST_GENOME_EVER_FOR_VIZ:
+                    draw_neural_network(win, BEST_GENOME_EVER_FOR_VIZ, config, nn_area_x, nn_area_y, nn_area_width, nn_area_height)
+
                 # Draw current piece (already handled by grid if locked, need to draw falling)
                 temp_piece_draw = Piece(current_piece.x, current_piece.y, current_piece.shape)
                 temp_piece_draw.rotation = current_piece.rotation
@@ -692,8 +870,9 @@ def run_neat(config_path):
     winner = p.run(eval_genomes, 50) # Run for 50 generations
 
     # Save the winner
+    # Also save the config with the winner for later loading if needed
     with open('best_tetris_ai.pkl', 'wb') as output:
-        pickle.dump(winner, output, 1)
+        pickle.dump((winner, config), output, 1) # Save (winner_genome, config_object)
 
     print('\nBest genome:\n{!s}'.format(winner))
     
@@ -702,12 +881,26 @@ def run_neat(config_path):
     # and without fitness updates, just playing.
 
 
-def play_with_ai(genome_path, config_path):
-    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                                neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                                config_path)
+def play_with_ai(genome_path, config_path=None):
+    # Config path is now optional if config is saved with genome
+    loaded_config = None
     with open(genome_path, "rb") as f:
-        genome = pickle.load(f)
+        data = pickle.load(f)
+        if isinstance(data, tuple) and len(data) == 2: # New format: (genome, config)
+            genome, loaded_config = data
+        else: # Old format: just genome
+            genome = data
+            print("Warning: Loaded genome might be from an old save without config. Loading from default config_path.")
+
+    if loaded_config: # Use the config saved with the genome
+        config = loaded_config
+    elif config_path: # Fallback to provided config_path
+        config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                                    neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                                    config_path)
+    else:
+        print("Error: Cannot load AI. Config not found with genome and no config_path provided.")
+        return
 
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
@@ -842,7 +1035,7 @@ if __name__ == '__main__':
     # To play with a saved AI:
     best_ai_path = os.path.join(local_dir, 'best_tetris_ai.pkl')
     if os.path.exists(best_ai_path):
-         play_with_ai(best_ai_path, config_path)
+         play_with_ai(best_ai_path, config_path) # Pass config_path for fallback
     else:
         print("No saved AI found. Training a new one...")
         run_neat(config_path)
