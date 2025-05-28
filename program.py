@@ -7,7 +7,7 @@ import pickle # To save and load the best genome
 
 # --- Pygame Setup ---
 pygame.font.init()
-pygame.mixer.init() # For sound effects (optional)
+pygame.mixer.init() # For audio effects when needed
 
 # Screen dimensions
 S_WIDTH = 1200
@@ -267,7 +267,7 @@ def draw_window(surface, grid, score=0, last_score = 0, generation=0, population
     max_score_y = TOP_LEFT_Y + PLAY_HEIGHT/2 + 50 # Aligned with score vertically
     surface.blit(label, (max_score_x, max_score_y))
 
-    # Generation, Population, Genome ID display (Can be adjusted as needed)
+    # Generation, Population, Genome ID display
     font = pygame.font.SysFont('comicsans', 20)
     gen_text = f"Gen: {generation}"
     pop_text = f"Pop: {population_size}"
@@ -277,7 +277,7 @@ def draw_window(surface, grid, score=0, last_score = 0, generation=0, population
     pop_label = font.render(pop_text, 1, (255,255,255))
     genome_label = font.render(genome_text, 1, (255,255,255))
 
-    # Position these texts as desired, for example, under the max score
+    # Position these texts under the max score
     text_start_y = max_score_y + label.get_height() + 10
     surface.blit(gen_label, (max_score_x, text_start_y))
     surface.blit(pop_label, (max_score_x, text_start_y + gen_label.get_height() + 5))
@@ -331,8 +331,7 @@ def get_board_features(grid, current_piece):
         bumpiness += abs(heights[i] - heights[i+1])
 
     # 5. Lines that would be cleared if current piece is placed (hard to calculate without placing)
-    #    For simplicity, we might not use this directly as an input, but use it in fitness.
-    #    Instead, let's consider the current piece's y position and type.
+    #    For simplicity, not using this directly as an input, will use it in fitness instead.
 
     # 6. Current piece type (one-hot encode or index)
     piece_type_idx = shapes.index(current_piece.shape)
@@ -364,7 +363,7 @@ def simulate_move(piece, grid, move_x, rotation_target):
         if not valid_space(temp_piece, grid):
             temp_piece.rotation -=1 # Revert if invalid rotation
             # If rotation is immediately invalid, this sequence might be bad
-            # For simplicity, we'll proceed, but more advanced AI would penalize this.
+            # For simplicity, proceeding anyway, but more advanced AI would penalize this.
             break 
 
     # 2. Simulate Horizontal Move
@@ -783,7 +782,7 @@ def eval_genomes(genomes, config, draw_while_training=True):
                 cleared_rows_count = clear_rows(grid, locked_positions)
                 total_lines_cleared_genome += cleared_rows_count
                 
-                # Update score (can be part of fitness too)
+                # Update score (also part of fitness calculation)
                 if cleared_rows_count == 1: score += 40
                 elif cleared_rows_count == 2: score += 100
                 elif cleared_rows_count == 3: score += 300
@@ -817,7 +816,7 @@ def eval_genomes(genomes, config, draw_while_training=True):
 
             # --- Drawing ---
             if draw_while_training:
-                # Only draw if you want to watch it train (slows down significantly)
+                # Draw while training to watch progress (slows down significantly)
                 # For faster training, comment out drawing or draw only for best genome.
                 # if GENERATION_COUNT % 5 == 0 and genome_id == genomes[0][0]: # Draw first genome every 5 gens
                 # if True: # Draw all # This line would be controlled by draw_while_training
@@ -889,13 +888,12 @@ def run_neat(config_path, draw_while_training=True):
 
     print('\nBest genome:\n{!s}'.format(winner))
     
-    # Visualize the best genome playing (optional)
-    # You'd need a separate function similar to eval_genomes but just for one genome
-    # and without fitness updates, just playing.
+    # Visualize the best genome playing
+    # Need a separate function similar to eval_genomes but just for one genome
 
 
 def play_with_ai(genome_path, config_path=None):
-    # Config path is now optional if config is saved with genome
+    # Config path is now optional since config is saved with genome
     loaded_config = None
     with open(genome_path, "rb") as f:
         data = pickle.load(f)
@@ -1201,7 +1199,7 @@ if __name__ == '__main__':
 
     # Initialize Pygame modules
     pygame.init() # General Pygame init
-    # pygame.font.init() # Already called globally, but doesn't hurt if called again or can be removed if already at top
+    # pygame.font.init() # Already called globally, but keeping this just in case
     # pygame.mixer.init() # Already called globally
 
     win = pygame.display.set_mode((S_WIDTH, S_HEIGHT))
@@ -1239,15 +1237,15 @@ if __name__ == '__main__':
                 play_with_ai(best_ai_path, config_path)
                 action_taken = True
             else:
-                # This case should ideally not be reached if button is properly disabled,
-                # but good to have a fallback message.
+                # Status check - this shouldn't be reached if button is properly disabled,
+                # but keeping a fallback message just in case.
                 print("Saved AI not found. Please train an AI first.")
             running_menu = False 
         elif choice == "quit":
             running_menu = False
 
     pygame.quit()
-    # Using quit() for a cleaner exit if the script is run directly
-    # For example, if launched from a terminal, this ensures the process terminates.
+    # Cleaner exit when script is run directly
+    # If launched from a terminal, this ensures the process terminates properly.
     import sys
     sys.exit()
